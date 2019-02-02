@@ -1,13 +1,14 @@
 import numpy as np
 import random
 class Node():
-    def __init__(self, state, num_actions, reward):
+    def __init__(self, state, num_actions, reward, parent):
         self.state=state
         self.avail_actions=[i for i in range(num_actions)]
         self.childs = {}
         self.value = reward
         self.expansions = 0
         self.num_actions=num_actions
+        self.parent=parent
 
         self.explorationRate=0.2
 
@@ -18,16 +19,18 @@ class Node():
         #SIMULATOR
         new_state=np.random.randint(0,255,(64,64))
         reward=np.random.random() -0.5
-        self.addChild(Node(new_state, self.num_actions, reward), action)
+        self.addChild(Node(new_state, self.num_actions, reward,self), action)
 
     def addChild(self, node, action):
         print('expanding node. Create node', node)
         self.childs[action]=node
         #Remove avail action in the node
         del self.avail_actions[self.avail_actions.index(action)]
+        print('Reward', node.value)
+        #backprop the reward to update parents nodes
+        self.updateValue(node.value)
 
     def selectChild(self):
-        #HERE DECIDE IF SELECT NEW CHILD OR EXPAND EXISTING ONE
         if len(self.childs) !=0:
             #don't wait leaf node, randomly expand current node
             #with available actions
@@ -36,7 +39,7 @@ class Node():
                 self.expand()
             else:
                 #Select the node with highest value
-                print('selecting among childs of', self)
+                print('selecting among childs (no yet by value) of', self)
                 node=list(self.childs.items())[0][1]
                 node.selectChild()
         else:
@@ -46,6 +49,13 @@ class Node():
     def updateValue(self, reward):
         self.expansions +=1
         self.value += reward
+        print('Node',self)
+        print('expansions', self.expansions)
+        print('value', self.value)
+
+        #Stops when reached root node
+        if(self.parent):
+            self.parent.updateValue(reward)
 
     def describ(self):
         print('Childs',self.childs)
@@ -82,9 +92,20 @@ class Tree():
     Next, the node is associated with the parent node, using
     the action that created it. Then, I repeat the process.
 
+
+    'NOw, it's time to update the value of the nodes.
+    So, the new node is already done. The reward is assigned to him.
+    From him, I have to backpropself.
+
+    In order to backprop, I need the parent node.
+
+    I thoguht tha maybe i can store in every new node, a reference to
+    the parent node object. In this way, when a new node is created,
+    it propagates it's value based on the reward back to the parent node,
+    which update it self and call it's parent node and so on..
     '''
     def predict(self, state):
-        root_node=Node(state, self.num_actions, 0)
+        root_node=Node(state, self.num_actions, 0, None)
 
         #make 10 rollouts to create node's value
         for i in range(10):
