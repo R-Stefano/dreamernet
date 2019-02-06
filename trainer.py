@@ -5,7 +5,7 @@ import numpy as np
 class Trainer():
     def trainVAE(self,sess, frames, vae):
         print('Starting VAE training..')
-        training_epoches=5
+        training_epoches=5000
         train_batch_size=32
         test_batch_size=64
 
@@ -17,7 +17,7 @@ class Trainer():
         test_dataset=frames[int(len(frames)*0.75):]
 
         for ep in range(training_epoches):
-            print('Training VAE, epoch ({}/{}'.format(ep,training_epoches))
+            print('Training VAE, epoch ({}/{})'.format(ep,training_epoches))
             #randomly 
             idx=np.random.randint(0, len(train_dataset)-train_batch_size)
             batchData=np.asarray(train_dataset[idx: idx+train_batch_size])
@@ -51,7 +51,7 @@ class Trainer():
 
     def trainRNN(self,sess, frames, actions, rnn):
         print('Starting RNN training..')
-        training_epoches=5
+        training_epoches=5000
         train_batch_size=32
         test_batch_size=64
 
@@ -59,6 +59,7 @@ class Trainer():
         test_dataset=(frames[int(len(frames)*0.75):], actions[int(len(frames)*0.75):])
 
         for ep in range(training_epoches):
+            print('Training RNN, epoch ({}/{})'.format(ep,training_epoches))
             inputData, labelData = self.prepareRNNData(train_batch_size, rnn.timesteps, rnn.state_rep_length, train_dataset)
             
             #initialize hidden state and cell state to zeros 
@@ -103,22 +104,34 @@ class Trainer():
         inputData=np.zeros((batch_size, timesteps, features + 1))
         labelData=np.zeros((batch_size, features))
 
-        print(np.asarray(dataset[0]).shape)
-        print(np.asarray(dataset[1]).shape)
+        #Store the idx of terminal states. Avoid training
+        #using a sequence ocming from 2 different games
+        terminal_idxs=np.argwhere(np.asarray(dataset[1])==-1)
 
         #Generate the timesteps for each batch
         i=0
         while (i < batch_size):
             idx=np.random.randint(0, (len(dataset[0])-timesteps-1))
+
             #check that it is not terminal state
-            if(np.sum(dataset[0][idx])>0):
-                #pad the first transitions with zeros 
+            if(not(np.any(terminal_idxs==idx))):
                 if(idx<9):
-                print(idx)
-                #retrieve state and the 9 previous states
-                states=np.asarray(dataset[0][(idx-9):(idx+1)])
-                #retrieve the action and the 9 previous actions
-                actions=np.expand_dims(np.asarray(dataset[1][(idx-9):(idx+1)]), axis=-1)
+                    #pad the first transitions with zeros 
+                    states=np.asarray(dataset[0][:(idx+1)])
+                    num_pads=(10-states.shape[0])
+                    zeros_pad=np.zeros((num_pads, features))
+                    states=np.concatenate((zeros_pad, states), axis=0)
+
+                    #pad the first actions with zeros
+                    actions=np.expand_dims(np.asarray(dataset[1][:(idx+1)]), axis=-1)
+                    zeros_pad=np.zeros((num_pads,1))
+                    actions=np.concatenate((zeros_pad, actions), axis=0)
+                else:
+                    #retrieve state and the 9 previous states
+                    states=np.asarray(dataset[0][(idx-9):(idx+1)])
+                    #retrieve the action and the 9 previous actions
+                    actions=np.expand_dims(np.asarray(dataset[1][(idx-9):(idx+1)]), axis=-1)
+
                 inputData[i]=np.concatenate((states, actions), axis=-1)
 
                 #Retrieve the target state

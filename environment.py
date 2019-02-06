@@ -2,11 +2,15 @@ from utils import preprocessingState
 import gym
 import numpy as np
 
+#1=NOOP
+#2=UP
+#3=DOWN
+
 class Env():
     def __init__(self):
         self.init_frame_skip=30
         self.frame_skip=4
-        self.sampleGenerationEpochs=1
+        self.sampleGenerationEpochs=50
         self.statesBuffer=[]
         self.actionsBuffer=[]
         self.env=gym.make('PongNoFrameskip-v4')
@@ -28,24 +32,19 @@ class Env():
                     # quick state preprocessing
                     s=preprocessingState(s)
                     self.statesBuffer.append(s)
-                    a = self.env.action_space.sample()
+                    #randomly sample action 0,1,2
+                    a = np.random.randint(3)
                     self.actionsBuffer.append(a)
                     rew=0
                     f_count=0
                 else:
                     f_count+=1
                 
-                s, r, d, _ =self.env.step(a)
+                s, r, d, _ =self.env.step(a+1)
                 rew += r 
                 if d:
                     self.statesBuffer.append(np.zeros((64,64,3)))
                     self.actionsBuffer.append(-1)
-            
-            print(len(self.statesBuffer))
-            print(len(self.actionsBuffer))
                 
         
         return self.statesBuffer, self.actionsBuffer
-
-env=Env()
-env.run()

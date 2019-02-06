@@ -7,7 +7,7 @@ from environment import Env
 from trainer import Trainer
 from utils import *
 
-isVAETraining=False
+isVAETraining=True
 isRNNTraining=True
 def main():
     sess=tf.Session()
