@@ -1,16 +1,20 @@
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
+from RNN import RNN
 from VAE import VAE
 from environment import Env
 from trainer import Trainer
 from utils import *
 
+isVAETraining=False
+isRNNTraining=True
 def main():
     sess=tf.Session()
 
     #Initialize model
-    vae = VAE()
+    vae = VAE(sess, isTraining=isVAETraining)
+    rnn=RNN(sess, isTraining=isRNNTraining)
 
     #instantiate environment
     env=Env()
@@ -18,8 +22,14 @@ def main():
     #instantiate trainer
     trainer=Trainer()
 
-    frames=env.run()
-    trainer.trainVAE(sess, frames, vae)
+    frames, actions=env.run()
+    if(isVAETraining):
+        trainer.trainVAE(sess, frames, vae)
+
+    #the states must be processed by VAE
+    embeddings=vae.predict(sess, frames)
+    if(isRNNTraining):
+        trainer.trainRNN(sess, embeddings, actions, rnn)
 
 
 def visualizeEmbeddings(sess,env,frames, vae):

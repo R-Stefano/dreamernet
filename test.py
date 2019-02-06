@@ -9,7 +9,8 @@ I need that MCTS, given the state, return to me
 what action I should do
 '''
 num_actions=3
-mcts=Tree(num_actions)
+rollouts=100
+mcts=Tree(num_actions, rollouts)
 
 def env():
     return np.random.randint(0,255,(64,64))
@@ -17,3 +18,4 @@ def env():
 s=env()
 
 a=mcts.predict(s)
+print(a)
