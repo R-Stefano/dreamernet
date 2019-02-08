@@ -1,5 +1,6 @@
 import tensorflow.contrib.layers as nn
 import tensorflow as tf
+import numpy as np
 class VAE():
     def __init__(self,sess, isTraining):
         self.sess=sess
@@ -24,10 +25,10 @@ class VAE():
 
     
     def buildGraph(self):
-        norm_x=self.X / 255.
+        self.norm_x=self.X / 255.
         #Encoder
         with tf.variable_scope('encoder'):
-            enc_1=nn.conv2d(norm_x, 32, 4, stride=2, padding="VALID")
+            enc_1=nn.conv2d(self.norm_x, 32, 4, stride=2, padding="VALID")
             enc_2=nn.conv2d(enc_1, 64, 4, stride=2, padding="VALID")
             enc_3=nn.conv2d(enc_2, 128, 4, stride=2, padding="VALID")
             enc_4=nn.conv2d(enc_3, 256, 4, stride=2, padding="VALID")
@@ -58,7 +59,7 @@ class VAE():
     
     def buildLoss(self):
         with tf.variable_scope('reconstruction_loss'):
-            self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.X - self.output), axis=[1,2,3]))
+            self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.norm_x - self.output), axis=[1,2,3]))
         with tf.variable_scope('KL_loss'):
             self.KLLoss= tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + tf.log(self.std +1e-9) - tf.square(self.mean) - self.std ,axis=-1))
 
@@ -86,7 +87,7 @@ class VAE():
             tf.summary.scalar('test_Total_loss',self.totLossPlace)
         ])
     
-    def predict(self, sess, states):
+    def predictBatch(self, sess, states):
         representations=[]
         for batchStart in range(0, len(states), 32):
             batchEnd=batchStart+32
@@ -94,3 +95,8 @@ class VAE():
             out=sess.run(self.latent, feed_dict={self.X: states[batchStart:batchEnd]})
             representations.extend(out.tolist())
         return representations
+
+    def predict(self, state):
+        out=self.sess.run(self.latent, feed_dict={self.X: np.expand_dims(state, axis=0)})
+
+        return out

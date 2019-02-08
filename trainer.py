@@ -1,11 +1,12 @@
 from random import shuffle
 import tensorflow as tf
 import numpy as np
+from utils import preprocessingState
 
 class Trainer():
     def trainVAE(self,sess, frames, vae):
         print('Starting VAE training..')
-        training_epoches=5000
+        training_epoches=5
         train_batch_size=32
         test_batch_size=64
 
@@ -51,7 +52,7 @@ class Trainer():
 
     def trainRNN(self,sess, frames, actions, rnn):
         print('Starting RNN training..')
-        training_epoches=5000
+        training_epoches=5
         train_batch_size=32
         test_batch_size=64
 
@@ -98,6 +99,17 @@ class Trainer():
 
                 summ = sess.run(rnn.testing, feed_dict={rnn.totLossPlace: (totLoss/avg)})
                 rnn.file.add_summary(summ, ep)
+
+    #Called to train alphazero using everything.
+    def trainAlphaZero(self, mcts, vae, rnn, env):
+        training_games=1
+
+        for i in range(training_games):
+            s=preprocessingState(env.initializeGame())
+            #Returns the embedding of the current state
+            s=np.squeeze(vae.predict(s))
+            a=mcts.predict(s)
+
     
     #Used to retrieve a sequence of 10 timesteps and action plus the target state embedding
     def prepareRNNData(self, batch_size, timesteps, features, dataset):

@@ -10,7 +10,7 @@ class Env():
     def __init__(self):
         self.init_frame_skip=30
         self.frame_skip=4
-        self.sampleGenerationEpochs=50
+        self.sampleGenerationEpochs=1
         self.statesBuffer=[]
         self.actionsBuffer=[]
         self.env=gym.make('PongNoFrameskip-v4')
@@ -48,3 +48,14 @@ class Env():
                 
         
         return self.statesBuffer, self.actionsBuffer
+    
+    def initializeGame(self):
+        s = self.env.reset()
+        d = False
+
+        #wait that the environment is ready
+        for i in range(self.init_frame_skip):
+            a = self.env.action_space.sample()
+            s, r, d, _ =self.env.step(a)
+        
+        return s

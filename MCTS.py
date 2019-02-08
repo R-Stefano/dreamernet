@@ -50,9 +50,10 @@ class Node():
 
 
 class Tree():
-    def __init__(self, num_actions,rollouts):
+    def __init__(self, num_actions,rollouts, rnn):
         self.num_actions=num_actions
         self.rollouts=rollouts
+        self.rnn=rnn
 
     #This function must return the action to use
     def predict(self, state):
@@ -77,10 +78,40 @@ class Tree():
         return np.argmax(actions)
 
     def generateChilds(self, parent):
-        childs=[]
-        for i in range(self.num_actions):
-            state=np.random.randint(0,255,(64,64))
-            childs.append(Node(state, parent))
+        #Here retrieve the parents states.
+        stateSequence=[]
+        dumpParent=parent
+        stateSequence.append(dumpParent.state)
+        for t in range(self.rnn.timesteps-1):
+            if (dumpParent.parent == None):
+                print('Check None parent', dumpParent.parent)
+                stateSequence.append(np.zeros((rnn.state_rep_length)))
+            else:
+                dumpParent=dumpParent.parent
+                stateSequence.append(dumpParent.state)
+
+        print(stateSequence)
+
+        #Creates a prediction for each action
+        batchStates=np.repeat(np.expand_dims(parent.state, axis=0), self.num_actions, axis=0) #num_actions, embed_length
+
+        #Assign an action to each state
+        #TODO: CONVERT TO NUMPY
+        batchActions=np.expand_dims(np.asarray([i for i in range(self.num_actions)]), axis=1)
+
+        inputData=np.concatenate((batchStates, batchActions), axis=-1)
+
+        #initialize hidden state and cell state to zeros 
+        cell_s=np.zeros((test_batch_size, rnn.hidden_units))
+        hidden_s=np.zeros((test_batch_size, rnn.hidden_units))
+
+        #TODO: RETRIEVE THE PARENT STATES. I NEED A SEQUENCE OF 10 STATES OR PADDING
+        predictedChilds=self.rnn.predict(inputData, cell_s, hidden_s)
+        print(predictedChilds.shape)
+        childs=[]        
+        for s1 in predictedChilds:
+            print(s1)
+            childs.append(Node(s1, parent))
         return childs
 
     def networkSimulator(self, state):

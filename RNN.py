@@ -59,3 +59,8 @@ class RNN():
         self.testing=tf.summary.merge([
             tf.summary.scalar('test_loss',self.totLossPlace)
         ])
+    
+    def predict(self, input, cell, hidden):
+        nextStates=self.sess.run(self.next_state, feed_dict={self.X: input,
+                                                             self.cell_state: cell
+                                                             self.hidden_state: hidden})
