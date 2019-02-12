@@ -17,13 +17,8 @@ class Env():
 
     def run(self):
         for i in range(self.sampleGenerationEpochs):
-            s = self.env.reset()
-            d = False
 
-            #wait that the environment is ready
-            for i in range(self.init_frame_skip):
-                a = self.env.action_space.sample()
-                s, r, d, _ =self.env.step(a)
+            s, d=self.initializeGame()
 
             f_count = 0
             rew=0
@@ -58,4 +53,11 @@ class Env():
             a = self.env.action_space.sample()
             s, r, d, _ =self.env.step(a)
         
-        return s
+        return s, d
+    
+    def repeatStep(self, action):
+        rew=0
+        for i in range(self.frame_skip):
+            s, r, d, _ =self.env.step(action)
+            rew += r
+        return s, rew, d

@@ -6,7 +6,7 @@ from utils import preprocessingState
 class Trainer():
     def trainVAE(self,sess, frames, vae):
         print('Starting VAE training..')
-        training_epoches=5
+        training_epoches=2000
         train_batch_size=32
         test_batch_size=64
 
@@ -52,7 +52,7 @@ class Trainer():
 
     def trainRNN(self,sess, frames, actions, rnn):
         print('Starting RNN training..')
-        training_epoches=5
+        training_epoches=2000
         train_batch_size=32
         test_batch_size=64
 
@@ -101,16 +101,59 @@ class Trainer():
                 rnn.file.add_summary(summ, ep)
 
     #Called to train alphazero using everything.
-    def trainAlphaZero(self, mcts, vae, rnn, env):
-        training_games=1
+    def trainAlphaZero(self,sess, mcts, vae, rnn, env, predictor):
+        training_games=100
+        epochs=10
+        training_steps=200
 
-        for i in range(training_games):
-            s=preprocessingState(env.initializeGame())
-            #Returns the embedding of the current state
-            s=np.squeeze(vae.predict(s))
-            a=mcts.predict(s)
+        step=0
+        for ep in range(epochs):
+            states=[]
+            actions=[]
+            rewards=[]
+            isTerminal=[]
+            for i in range(training_games):
+                s,d=env.initializeGame()
+                while not(d):
+                    s=preprocessingState(s)
+                    #Returns the embedding of the current state
+                    s=np.squeeze(vae.predict(s))
+                    a=mcts.predict(s)
 
-    
+                    s1, r, d=env.repeatStep(a+1)
+
+                    states.append(s)
+                    actions.append(a)
+                    rewards.append(r)
+                    isTerminal.append(d)
+                    s=s1
+
+            for tr in range(training_steps):
+                batchNextStates=[]
+                batchStates=[]
+                batchActions=[]
+                batchRewards=[]
+                batchTerminal=[]
+                #Generate a batch of 32 examples to feed to train the network
+                for i in range(32):
+                    idx=np.random.randint(0, len(states)-1)
+                    batchNextStates.append(states[idx+1])
+                    batchStates.append(states[idx])
+                    batchActions.append(actions[idx])
+                    batchRewards.append(rewards[idx])
+                    batchTerminal.append(isTerminal[idx])
+                
+                batchTerminal=np.asarray(batchTerminal).astype(int)
+                #First feed the next state to the network to obtain the prediction about the value of V(s')
+                _, s1Values=predictor.predict(np.asarray(batchNextStates)) #return batch_size,1
+                _, summ,=sess.run([predictor.opt, predictor.training], feed_dict={predictor.X: np.asarray(batchStates),
+                                                                                predictor.rewards: np.asarray(np.expand_dims(batchRewards, axis=-1)),
+                                                                                predictor.actions: np.asarray(batchActions),
+                                                                                predictor.Vs1: s1Values,
+                                                                                predictor.isTerminal: batchTerminal})
+                predictor.file.add_summary(summ, step)
+                step+=1
+
     #Used to retrieve a sequence of 10 timesteps and action plus the target state embedding
     def prepareRNNData(self, batch_size, timesteps, features, dataset):
         inputData=np.zeros((batch_size, timesteps, features + 1))

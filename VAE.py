@@ -1,13 +1,13 @@
 import tensorflow.contrib.layers as nn
 import tensorflow as tf
 import numpy as np
+
 class VAE():
     def __init__(self,sess, isTraining):
         self.sess=sess
         self.X=tf.placeholder(tf.float32, shape=[None, 64, 64, 3])
         self.latentDimension = 32
         self.model_folder='models/VAE/'
-        self.isTest=False
 
 
         self.buildGraph()
@@ -41,11 +41,7 @@ class VAE():
             #Leave RELu to keep std always positive. Or use tf.exp(tf.log(self.std))
             self.std = nn.fully_connected(enc_4_flat, self.latentDimension)
 
-            #At building time, isTest used to see results of LSTM 
-            if (self.isTest):
-                self.latent=tf.placeholder(tf.float32, shape=[None, self.latentDimension])
-            else:
-                self.latent = self.mean + self.std * tf.random.normal([self.latentDimension])
+            self.latent = self.mean + self.std * tf.random.normal([self.latentDimension])
 
         #Decoder
         with tf.variable_scope('decoder'):
@@ -98,5 +94,10 @@ class VAE():
 
     def predict(self, state):
         out=self.sess.run(self.latent, feed_dict={self.X: np.expand_dims(state, axis=0)})
+
+        return out
+    
+    def embedDecod(self, embed):
+        out=self.sess.run(self.output, feed_dict={self.latent: embed})
 
         return out

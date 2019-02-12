@@ -4,12 +4,14 @@ import tensorflow as tf
 from RNN import RNN
 from VAE import VAE
 from MCTS import Tree
+from evaluator import Evaluator
 from environment import Env
 from trainer import Trainer
 from utils import *
 
-isVAETraining=False #True
-isRNNTraining=False #True
+isVAETraining=True
+isRNNTraining=True
+isPredTraining=True
 
 rollouts=100
 num_actions=3
@@ -19,8 +21,9 @@ def main():
     #Initialize model
     vae = VAE(sess, isTraining=isVAETraining)
     rnn=RNN(sess, isTraining=isRNNTraining)
-    mcts=Tree(num_actions, rollouts, rnn)
+    predictor=Evaluator(sess, isTraining=isPredTraining)
 
+    mcts=Tree(num_actions, rollouts, rnn, predictor)
     #instantiate environment
     env=Env()
 
@@ -37,7 +40,7 @@ def main():
         trainer.trainRNN(sess, embeddings, actions, rnn)
 
     #Tran alphazero using MCTS
-    trainer.trainAlphaZero(mcts, vae, rnn, env)
+    trainer.trainAlphaZero(sess, mcts, vae, rnn, env, predictor)
 
     
     '''
