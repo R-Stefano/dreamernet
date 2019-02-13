@@ -1,35 +1,34 @@
-from random import shuffle
 import tensorflow as tf
 import numpy as np
 from utils import preprocessingState
 
+flags = tf.app.flags
+FLAGS = flags.FLAGS
+
 class Trainer():
-    def trainVAE(self,sess, frames, vae):
+    def trainVAE(self,frames, vae):
         print('Starting VAE training..')
-        training_epoches=2000
-        train_batch_size=32
-        test_batch_size=64
+        training_epoches=FLAGS.VAE_training_epoches
+        train_batch_size=FLAGS.VAE_train_size
+        test_batch_size=FLAGS.VAE_test_size
 
-        #Shuffle the examples
-        shuffle(frames)
-
-        #TODO: CONVERT TO NUMPY USING IDXS MASK
         train_dataset=frames[:int(len(frames)*0.75)]
         test_dataset=frames[int(len(frames)*0.75):]
 
         for ep in range(training_epoches):
             print('Training VAE, epoch ({}/{})'.format(ep,training_epoches))
-            #randomly 
-            idx=np.random.randint(0, len(train_dataset)-train_batch_size)
-            batchData=np.asarray(train_dataset[idx: idx+train_batch_size])
 
-            _, summ = sess.run([vae.opt, vae.training], feed_dict={vae.X: batchData})
+            #Sample from frames generated
+            idxs=np.random.randint(0, train_dataset.shape[0], size=train_batch_size)
+            batchData=train_dataset[idxs]
+
+            _, summ = vae.sess.run([vae.opt, vae.training], feed_dict={vae.X: batchData})
 
             vae.file.add_summary(summ, ep)
 
             if ep % 50 ==0:
                 print('Saving VAE..')
-                vae.saver.save(sess, vae.model_folder+"graph.ckpt")
+                vae.save()
 
                 rec_loss=0
                 kl_loss=0
@@ -38,37 +37,37 @@ class Trainer():
                 print('Testing VAE..')
                 for batchStart in range(0, len(test_dataset), test_batch_size):
                     batchEnd=batchStart+test_batch_size
-                    batchData=np.asarray(test_dataset[batchStart:batchEnd])
+                    batchData=test_dataset[batchStart:batchEnd]
 
-                    l1, l2, l3= sess.run([vae.reconstr_loss, vae.KLLoss, vae.totLoss], feed_dict={vae.X: batchData})
+                    l1, l2, l3= vae.sess.run([vae.reconstr_loss, vae.KLLoss, vae.totLoss], feed_dict={vae.X: batchData})
 
                     rec_loss +=l1
                     kl_loss += l2
                     tot_loss += l3
                     avg +=1
 
-                summ = sess.run(vae.testTensorboard, feed_dict={vae.recLossPlace: (rec_loss/avg), vae.klLossPlace: (kl_loss/avg), vae.totLossPlace: (tot_loss/avg)})
+                summ = vae.sess.run(vae.testTensorboard, feed_dict={vae.recLossPlace: (rec_loss/avg), vae.klLossPlace: (kl_loss/avg), vae.totLossPlace: (tot_loss/avg)})
                 vae.file.add_summary(summ, ep)
 
-    def trainRNN(self,sess, frames, actions, rnn):
+    def trainRNN(self,frames, actions, rnn):
         print('Starting RNN training..')
-        training_epoches=2000
-        train_batch_size=32
-        test_batch_size=64
+        training_epoches=FLAGS.RNN_training_epoches
+        train_batch_size=FLAGS.RNN_train_size
+        test_batch_size=FLAGS.RNN_test_size
 
         train_dataset=(frames[:int(len(frames)*0.75)], actions[:int(len(frames)*0.75)])
         test_dataset=(frames[int(len(frames)*0.75):], actions[int(len(frames)*0.75):])
 
         for ep in range(training_epoches):
             print('Training RNN, epoch ({}/{})'.format(ep,training_epoches))
-            inputData, labelData = self.prepareRNNData(train_batch_size, rnn.timesteps, rnn.state_rep_length, train_dataset)
+            inputData, labelData = self.prepareRNNData(train_batch_size, rnn.sequence_length, rnn.latent_dimension, train_dataset)
             
             #initialize hidden state and cell state to zeros 
             cell_s=np.zeros((train_batch_size, rnn.hidden_units))
             hidden_s=np.zeros((train_batch_size, rnn.hidden_units))
 
             #Train
-            _, summ = sess.run([rnn.opt, rnn.training], feed_dict={rnn.X: inputData, 
+            _, summ = rnn.sess.run([rnn.opt, rnn.training], feed_dict={rnn.X: inputData, 
                                                          rnn.true_next_state: labelData,
                                                          rnn.cell_state: cell_s,
                                                          rnn.hidden_state: hidden_s})
@@ -77,57 +76,44 @@ class Trainer():
             #Saving and testing
             if ep % 50 ==0:
                 print('Saving RNN..')
-                rnn.saver.save(sess, rnn.model_folder+"graph.ckpt")
+                rnn.save()
 
                 totLoss=0
                 avg=0
                 print('Testing RNN..')
                 for b in range(len(test_dataset[0])//test_batch_size):
-                    inputData, labelData = self.prepareRNNData(test_batch_size, rnn.timesteps, rnn.state_rep_length, test_dataset)
+                    inputData, labelData = self.prepareRNNData(test_batch_size, rnn.sequence_length, rnn.latent_dimension, test_dataset)
 
                     #initialize hidden state and cell state to zeros 
                     cell_s=np.zeros((test_batch_size, rnn.hidden_units))
                     hidden_s=np.zeros((test_batch_size, rnn.hidden_units))
 
                     #Train
-                    loss = sess.run([rnn.loss], feed_dict={rnn.X: inputData, 
+                    loss = rnn.sess.run([rnn.loss], feed_dict={rnn.X: inputData, 
                                                            rnn.true_next_state: labelData,
                                                            rnn.cell_state: cell_s,
                                                            rnn.hidden_state: hidden_s})
                     totLoss += loss[0]
                     avg +=1
 
-                summ = sess.run(rnn.testing, feed_dict={rnn.totLossPlace: (totLoss/avg)})
+                summ = rnn.sess.run(rnn.testing, feed_dict={rnn.totLossPlace: (totLoss/avg)})
                 rnn.file.add_summary(summ, ep)
 
     #Called to train alphazero using everything.
-    def trainAlphaZero(self,sess, mcts, vae, rnn, env, predictor):
-        training_games=100
-        epochs=10
-        training_steps=200
+    def trainActor(self,mcts, vae, rnn, env, actor):
+        training_games=FLAGS.actor_training_games
+        epochs=FLAGS.actor_training_epochs
+        training_steps=FLAGS.actor_training_steps
+        testing_games=FLAGS.actor_testing_games
 
         step=0
         for ep in range(epochs):
-            states=[]
-            actions=[]
-            rewards=[]
-            isTerminal=[]
-            for i in range(training_games):
-                s,d=env.initializeGame()
-                while not(d):
-                    s=preprocessingState(s)
-                    #Returns the embedding of the current state
-                    s=np.squeeze(vae.predict(s))
-                    a=mcts.predict(s)
+            print('Training Actor, epoch ({}/{})'.format(ep,epochs))
 
-                    s1, r, d=env.repeatStep(a+1)
+            print('Generating games..')
+            states, actions, rewards, isTerminal=self.play(training_games, env, vae, mcts)
 
-                    states.append(s)
-                    actions.append(a)
-                    rewards.append(r)
-                    isTerminal.append(d)
-                    s=s1
-
+            print('training on sampled transitions..')
             for tr in range(training_steps):
                 batchNextStates=[]
                 batchStates=[]
@@ -145,14 +131,48 @@ class Trainer():
                 
                 batchTerminal=np.asarray(batchTerminal).astype(int)
                 #First feed the next state to the network to obtain the prediction about the value of V(s')
-                _, s1Values=predictor.predict(np.asarray(batchNextStates)) #return batch_size,1
-                _, summ,=sess.run([predictor.opt, predictor.training], feed_dict={predictor.X: np.asarray(batchStates),
-                                                                                predictor.rewards: np.asarray(np.expand_dims(batchRewards, axis=-1)),
-                                                                                predictor.actions: np.asarray(batchActions),
-                                                                                predictor.Vs1: s1Values,
-                                                                                predictor.isTerminal: batchTerminal})
-                predictor.file.add_summary(summ, step)
+                _, s1Values=actor.predict(np.asarray(batchNextStates)) #return batch_size,1
+                _, summ,=actor.sess.run([actor.opt, actor.training], feed_dict={actor.X: np.asarray(batchStates),
+                                                                                actor.rewards: np.asarray(np.expand_dims(batchRewards, axis=-1)),
+                                                                                actor.actions: np.asarray(batchActions),
+                                                                                actor.Vs1: s1Values,
+                                                                                actor.isTerminal: batchTerminal})
+                actor.file.add_summary(summ, step)
                 step+=1
+            print('Saving the actor..')
+            actor.save() 
+
+            print('Testing the actor..')
+            avg_rew=[]
+            for i in range(testing_games):
+                _, _, rewards, _=self.play(1, env, vae, mcts)
+                avg_rew.append(np.sum(rewards))
+            
+            print('avg test rew', np.mean(avg_rew))
+            summ=actor.sess.run(actor.testing, feed_dict={actor.avgRew: np.mean(avg_rew)})
+            actor.file.add_summary(summ, ep)
+
+    def play(self, number_games, env, vae, mcts):
+        states=[]
+        actions=[]
+        rewards=[]
+        isTerminal=[]
+        for i in range(number_games):
+            s,d=env.initializeGame()
+            while not(d):
+                s=preprocessingState(s)
+                #Returns the embedding of the current state
+                s=np.squeeze(vae.encode(s))
+                a=mcts.predict(s)
+
+                s1, r, d=env.repeatStep(a+1)
+
+                states.append(s)
+                actions.append(a)
+                rewards.append(r)
+                isTerminal.append(d)
+                s=s1
+        return states, actions, rewards, isTerminal
 
     #Used to retrieve a sequence of 10 timesteps and action plus the target state embedding
     def prepareRNNData(self, batch_size, timesteps, features, dataset):

@@ -1,27 +1,31 @@
 import tensorflow.contrib.layers as nn
 import tensorflow as tf
 import numpy as np
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 
 class VAE():
-    def __init__(self,sess, isTraining):
+    def __init__(self,sess):
         self.sess=sess
-        self.X=tf.placeholder(tf.float32, shape=[None, 64, 64, 3])
-        self.latentDimension = 32
+        #HYPERPARAMETERS
         self.model_folder='models/VAE/'
 
+        self.X=tf.placeholder(tf.float32, shape=[None, 64, 64, 3])
 
         self.buildGraph()
         self.buildLoss()
-        self.buildUtils()
         self.sess.run(tf.global_variables_initializer())
 
         #Save/restore only the weights variables
         vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.saver=tf.train.Saver(var_list=vars)
 
-        if not(isTraining):
+        if not(FLAGS.training_VAE):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('VAE weights have been restored')
+        else:
+            self.buildUtils()
+
 
     
     def buildGraph(self):
@@ -37,11 +41,11 @@ class VAE():
         
         #Latent space
         with tf.variable_scope('latent_space'):
-            self.mean = nn.fully_connected(enc_4_flat, self.latentDimension, activation_fn=None)
+            self.mean = nn.fully_connected(enc_4_flat, FLAGS.latent_dimension, activation_fn=None)
             #Leave RELu to keep std always positive. Or use tf.exp(tf.log(self.std))
-            self.std = nn.fully_connected(enc_4_flat, self.latentDimension)
+            self.std = nn.fully_connected(enc_4_flat, FLAGS.latent_dimension)
 
-            self.latent = self.mean + self.std * tf.random.normal([self.latentDimension])
+            self.latent = self.mean + self.std * tf.random.normal([FLAGS.latent_dimension])
 
         #Decoder
         with tf.variable_scope('decoder'):
@@ -68,9 +72,9 @@ class VAE():
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
 
         self.training=tf.summary.merge([
-            tf.summary.scalar('reconstruction_loss', self.reconstr_loss),
-            tf.summary.scalar('KL_loss', self.KLLoss),
-            tf.summary.scalar('Total_loss', self.totLoss)
+            tf.summary.scalar('VAE_reconstruction_loss', self.reconstr_loss),
+            tf.summary.scalar('VAE_KL_loss', self.KLLoss),
+            tf.summary.scalar('VAE_total_loss', self.totLoss)
         ])
 
         self.recLossPlace=tf.placeholder(tf.float32)
@@ -78,26 +82,27 @@ class VAE():
         self.totLossPlace=tf.placeholder(tf.float32)
 
         self.testTensorboard=tf.summary.merge([
-            tf.summary.scalar('test_reconstruction_loss',self.recLossPlace),
-            tf.summary.scalar('test_KL_loss',self.klLossPlace),
-            tf.summary.scalar('test_Total_loss',self.totLossPlace)
+            tf.summary.scalar('VAE_test_reconstruction_loss',self.recLossPlace),
+            tf.summary.scalar('VAE_test_KL_loss',self.klLossPlace),
+            tf.summary.scalar('VAE_test_total_loss',self.totLossPlace)
         ])
+
+    def save(self):
+        self.saver.save(self.sess, self.model_folder+"graph.ckpt")
+
+    def encode(self, states):
+        if (len(states.shape) == 3): #feeding single example
+            states=np.expand_dims(states, axis=0)
+
+        embeds=np.zeros((states.shape[0], FLAGS.latent_dimension))
+        for batchStart in range(0, states.shape[0], FLAGS.VAE_test_size):
+            batchEnd=batchStart+FLAGS.VAE_test_size
+
+            out=self.sess.run(self.latent, feed_dict={self.X: states[batchStart:batchEnd]})
+            embeds[batchStart:batchEnd]=out
+        return embeds
     
-    def predictBatch(self, sess, states):
-        representations=[]
-        for batchStart in range(0, len(states), 32):
-            batchEnd=batchStart+32
-
-            out=sess.run(self.latent, feed_dict={self.X: states[batchStart:batchEnd]})
-            representations.extend(out.tolist())
-        return representations
-
-    def predict(self, state):
-        out=self.sess.run(self.latent, feed_dict={self.X: np.expand_dims(state, axis=0)})
-
-        return out
-    
-    def embedDecod(self, embed):
+    def decode(self, embed):
         out=self.sess.run(self.output, feed_dict={self.latent: embed})
 
         return out

@@ -6,43 +6,37 @@ import numpy as np
 #2=UP
 #3=DOWN
 
-class Env():
-    def __init__(self):
-        self.init_frame_skip=30
-        self.frame_skip=4
-        self.sampleGenerationEpochs=1
+class EnvWrap():
+    def __init__(self, init_skip, frame_skip, envName, image_preprocessing):
+        self.init_frame_skip=init_skip
+        self.frame_skip=frame_skip
         self.statesBuffer=[]
         self.actionsBuffer=[]
-        self.env=gym.make('PongNoFrameskip-v4')
+        self.env=gym.make(envName)
+        self.process_frame=image_preprocessing
 
-    def run(self):
-        for i in range(self.sampleGenerationEpochs):
+    def run(self, simulation_epochs):
+        for i in range(simulation_epochs):
 
             s, d=self.initializeGame()
 
-            f_count = 0
-            rew=0
             while (not(d)):
-                if f_count % self.frame_skip == 0:
+                if (self.process_frame):
                     # quick state preprocessing
                     s=preprocessingState(s)
-                    self.statesBuffer.append(s)
-                    #randomly sample action 0,1,2
-                    a = np.random.randint(3)
-                    self.actionsBuffer.append(a)
-                    rew=0
-                    f_count=0
-                else:
-                    f_count+=1
-                
-                s, r, d, _ =self.env.step(a+1)
-                rew += r 
+                self.statesBuffer.append(s)
+
+                #randomly sample action 0,1,2
+                a = np.random.randint(3)
+                self.actionsBuffer.append(a)
+
+                s, r, d=self.repeatStep(a+1)
+
                 if d:
                     self.statesBuffer.append(np.zeros((64,64,3)))
                     self.actionsBuffer.append(-1)
                 
-        
-        return self.statesBuffer, self.actionsBuffer
+        return np.asarray(self.statesBuffer), np.asarray(self.actionsBuffer)
     
     def initializeGame(self):
         s = self.env.reset()

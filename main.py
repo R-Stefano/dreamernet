@@ -1,47 +1,80 @@
-import matplotlib.pyplot as plt
 import tensorflow as tf
 
-from RNN import RNN
-from VAE import VAE
-from MCTS import Tree
-from evaluator import Evaluator
-from environment import Env
+flags = tf.app.flags
+FLAGS = flags.FLAGS
+#Environment
+flags.DEFINE_integer('num_actions', 3, 'Number of possible actions in the environment')
+flags.DEFINE_integer('init_frame_skip', 30, 'Number of frames to skip at the beginning of each game')
+flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
+flags.DEFINE_string('env', 'PongNoFrameskip-v4', 'The environment to use')
+flags.DEFINE_integer('simulation_epochs', 10, 'Number of games to play to generate the data to train VAE or RNN')
+
+#Hyperparameters
+flags.DEFINE_float('learning_rate', 0.01, 'Initial learning rate.')
+flags.DEFINE_integer('latent_dimension', 32, 'Dimension of the embedded representation')
+flags.DEFINE_boolean('image_preprocessing', True, 'If False, the image is fed into the VAE as it is')
+
+#NOTE: CHECK WELL IN THE ENVIRONMENT CLASS. THE FINAL STATE IS ADDED AS A 64,64 MATRIX ALWAYS
+
+#VAE 
+flags.DEFINE_boolean('training_VAE', True, 'If True, train the VAE model')
+flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train VAE')
+flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
+flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')
+
+#RNN
+flags.DEFINE_boolean('training_RNN', True, 'If True, train the RNN model')
+flags.DEFINE_integer('sequence_length', 10, 'Total number of states to feed to the RNN')
+flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
+flags.DEFINE_integer('RNN_training_epoches', 2000, 'Number of epoches to train VAE')
+flags.DEFINE_integer('RNN_train_size', 32, 'Number of frames to feed at each epoch')
+flags.DEFINE_integer('RNN_test_size', 64, 'Number of frames to feed at each epoch')
+#MCTS
+flags.DEFINE_integer('rollouts', 100, 'Number of simulations before selecting the action')
+
+#ACTOR
+flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
+flags.DEFINE_integer('actor_training_games', 10, 'Number of games to play to generate the transitions to train the Actor')
+flags.DEFINE_integer('actor_training_steps', 200, 'Number of training steps after the training games')
+flags.DEFINE_integer('actor_training_epochs', 100, 'Number of times repeate games + steps')
+flags.DEFINE_integer('actor_testing_games', 10, 'Number of games to play after each training')
+
+from models import VAE, RNN, ACTOR, MCTS
+from EnvWrapper import EnvWrap
 from trainer import Trainer
 from utils import *
+import matplotlib.pyplot as plt
 
-isVAETraining=True
-isRNNTraining=True
-isPredTraining=True
 
-rollouts=100
-num_actions=3
 def main():
     sess=tf.Session()
 
-    #Initialize model
-    vae = VAE(sess, isTraining=isVAETraining)
-    rnn=RNN(sess, isTraining=isRNNTraining)
-    predictor=Evaluator(sess, isTraining=isPredTraining)
+    #Instantiate the models
+    vae = VAE.VAE(sess)
+    rnn=RNN.RNN(sess)
+    actor=ACTOR.ACTOR(sess)
+    mcts=MCTS.Tree(rnn, actor)
 
-    mcts=Tree(num_actions, rollouts, rnn, predictor)
     #instantiate environment
-    env=Env()
+    env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env, FLAGS.image_preprocessing)
 
     #instantiate trainer
     trainer=Trainer()
 
-    frames, actions=env.run()
-    if(isVAETraining):
-        trainer.trainVAE(sess, frames, vae)
+    if (FLAGS.training_VAE or FLAGS.training_RNN):
+        #Generate samples to train VAE and RNN
+        frames, actions=env.run(FLAGS.simulation_epochs)
 
-    if(isRNNTraining):
+    if(FLAGS.training_VAE):
+        trainer.trainVAE(frames, vae)
+
+    if(FLAGS.training_RNN):
         #the states must be processed by VAE
-        embeddings=vae.predictBatch(sess, frames)
-        trainer.trainRNN(sess, embeddings, actions, rnn)
-
+        embeddings=vae.encode(frames)
+        trainer.trainRNN(embeddings, actions, rnn)
+    
     #Tran alphazero using MCTS
-    trainer.trainAlphaZero(sess, mcts, vae, rnn, env, predictor)
-
+    trainer.trainActor(mcts, vae, rnn, env, actor)
     
     '''
     ONce the VAE and RNN have been trained, I have to use the alphazero.

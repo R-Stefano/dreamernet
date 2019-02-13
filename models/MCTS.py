@@ -1,5 +1,8 @@
+import tensorflow as tf
 import numpy as np
 
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 class Node():
     def __init__(self, state, parent, parent_action):
         self.state=state
@@ -51,26 +54,26 @@ class Node():
 
 
 class Tree():
-    def __init__(self, num_actions,rollouts, rnn, predictor):
-        self.num_actions=num_actions
-        self.rollouts=rollouts
+    def __init__(self, rnn, actor):
+        self.num_actions=FLAGS.num_actions
+        self.rollouts=FLAGS.rollouts
         self.rnn=rnn
-        self.predictor=predictor
+        self.actor=actor
 
     #This function must return the action to use
     def predict(self, state):
-        priors, value=self.networkSimulator(state)
+        priors, value=self.actor.predict(state)
         root_node=Node(state, None, 0)
         childs=self.generateChilds(root_node)
-        root_node.initialize(np.squeeze(priors), np.squeeze(value), childs)
+        root_node.initialize(priors, value, childs)
         #rollouts to create node's values
         for i in range(self.rollouts):
             nodeToExpand = root_node.selectChild()
-            priors, value=self.networkSimulator(nodeToExpand.state)
+            priors, value=self.actor.predict(nodeToExpand.state)
             childs=self.generateChilds(nodeToExpand)
-            nodeToExpand.initialize(np.squeeze(priors), np.squeeze(value), childs)
+            nodeToExpand.initialize(priors, value, childs)
             #update the value of the parents
-            nodeToExpand.expand(np.squeeze(value))
+            nodeToExpand.expand(value)
 
         #Pick the node with high value and return the action
         actions=[]
@@ -79,13 +82,13 @@ class Tree():
         return np.argmax(actions)
 
     def generateChilds(self, parent):
-        #Here retrieve the parents states.
+        #Retrieve the parents states to create the sequence
         stateSequence=[]
         dumpParent=parent
         stateSequence.append(np.append(dumpParent.state, -1))
-        for t in range(self.rnn.timesteps-1):
+        for t in range(self.rnn.sequence_length-1):
             if (dumpParent.parent == None):
-                stateSequence.append(np.zeros((self.rnn.state_rep_length + 1)))
+                stateSequence.append(np.zeros((self.rnn.latent_dimension + 1)))
             else:
                 dumpParent=dumpParent.parent
                 stateSequence.append(np.append(dumpParent.state, dumpParent.parent_action))
@@ -101,18 +104,10 @@ class Tree():
         #Assign an action to each state
         batchStates[:,-1,-1]=np.asarray([i for i in range(self.num_actions)])
 
-        #initialize hidden state and cell state to zeros 
-        cell_s=np.zeros((self.num_actions, self.rnn.hidden_units))
-        hidden_s=np.zeros((self.num_actions, self.rnn.hidden_units))
-
         #Feedx the current node state as well with the possible actions
         #Get the next states based on the actions and create the child nodes
-        predictedChilds=self.rnn.predict(batchStates, cell_s, hidden_s)
+        predictedChilds=self.rnn.predict(batchStates)
         childs=[]        
         for action_idx, s1 in enumerate(predictedChilds):
             childs.append(Node(s1, parent, action_idx))
         return childs
-
-    def networkSimulator(self, state):
-        policy, value=self.predictor.predict(state)
-        return policy, value

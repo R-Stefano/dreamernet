@@ -1,26 +1,33 @@
 import tensorflow.contrib.layers as nn
 import tensorflow as tf
+import numpy as np
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 class RNN():
-    def __init__(self, sess, isTraining):
+    def __init__(self, sess):
         self.sess=sess
-        self.state_rep_length=32 #Same as VAE LATENT VEC
-        self.timesteps=10 #how many frames in a sequence
-        self.hidden_units=128
         self.model_folder='models/RNN/'
-        self.X=tf.placeholder(tf.float32, shape=[None, self.timesteps, self.state_rep_length+1])
+
+        #HYPERPARAMETERS
+        self.sequence_length=FLAGS.sequence_length
+        self.latent_dimension=FLAGS.latent_dimension
+        self.hidden_units=FLAGS.hidden_units
+
+        self.X=tf.placeholder(tf.float32, shape=[None, self.sequence_length, self.latent_dimension+1])
         
         self.buildGraph()
         self.buildLoss()
-        self.buildUtils()
         self.sess.run(tf.global_variables_initializer())
 
         #Save/restore only the weights variables
         vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.saver=tf.train.Saver(var_list=vars)
 
-        if not(isTraining):
+        if not(FLAGS.training_RNN):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('RNN weights have been restored')
+        else:
+            self.buildUtils()
 
     
     def buildGraph(self):
@@ -37,11 +44,11 @@ class RNN():
         #hidden_cell_statesTuple is a list of 2 elements: self.cell_state, self.hidden_state where self.output[:, -1, :]=self.cell_state
         self.output, self.hidden_cell_statesTuple=tf.nn.dynamic_rnn(cell=self.lstm_cell, inputs=self.X, initial_state=init_state)
 
-        self.next_state=nn.fully_connected(self.output[:,-1], self.state_rep_length, activation_fn=None)
+        self.next_state=nn.fully_connected(self.output[:,-1], self.latent_dimension, activation_fn=None)
 
     
     def buildLoss(self):
-        self.true_next_state=tf.placeholder(tf.float32, shape=[None, self.state_rep_length])
+        self.true_next_state=tf.placeholder(tf.float32, shape=[None, self.latent_dimension])
 
         #print MSE
         self.loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.true_next_state - self.next_state), axis=-1))
@@ -51,17 +58,25 @@ class RNN():
     def buildUtils(self):
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
         self.training=tf.summary.merge([
-            tf.summary.scalar('Loss', self.loss)
+            tf.summary.scalar('RNN_loss', self.loss)
         ])
 
         self.totLossPlace=tf.placeholder(tf.float32)
 
         self.testing=tf.summary.merge([
-            tf.summary.scalar('test_loss',self.totLossPlace)
+            tf.summary.scalar('RNN_test_loss',self.totLossPlace)
         ])
     
-    def predict(self, input, cell, hidden):
+    def save(self):
+        self.saver.save(self.sess, self.model_folder+"graph.ckpt")
+
+    def predict(self, input, initialize=None):
+        if (initialize==None):
+            #initialize hidden state and cell state to zeros 
+            cell_s=np.zeros((input.shape[0], self.hidden_units))
+            hidden_s=np.zeros((input.shape[0], self.hidden_units))
+
         nextStates=self.sess.run(self.next_state, feed_dict={self.X: input,
-                                                             self.cell_state: cell,
-                                                             self.hidden_state: hidden})
+                                                             self.cell_state: cell_s,
+                                                             self.hidden_state: hidden_s})
         return nextStates

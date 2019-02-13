@@ -2,34 +2,36 @@ import tensorflow.contrib.layers as nn
 import tensorflow as tf
 import numpy as np
 
-class Evaluator():
-    def __init__(self,sess, isTraining):
+flags = tf.app.flags
+FLAGS = flags.FLAGS
+class ACTOR():
+    def __init__(self,sess):
         self.sess=sess
-        self.latentDimension = 32
-        self.num_actions=3
-        self.X=tf.placeholder(tf.float32, shape=[None, self.latentDimension])
-        self.model_folder='models/predictor/'
+        self.X=tf.placeholder(tf.float32, shape=[None, FLAGS.latent_dimension,])
+
+        self.model_folder='models/ACTOR/'
 
 
         self.buildGraph()
         self.buildLoss()
-        self.buildUtils()
         self.sess.run(tf.global_variables_initializer())
 
         #Save/restore only the weights variables
         vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.saver=tf.train.Saver(var_list=vars)
 
-        if not(isTraining):
+        if not(FLAGS.training_ACTOR):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
-            print('Predictor weights have been restored')
+            print('ACTOR weights have been restored')
+        else:
+            self.buildUtils()
 
     
     def buildGraph(self):
         l1 = nn.fully_connected(self.X, 128)
         l2 = nn.fully_connected(l1, 256)
 
-        self.policyOutput=nn.fully_connected(l2, self.num_actions, activation_fn=tf.nn.softmax)
+        self.policyOutput=nn.fully_connected(l2, FLAGS.num_actions, activation_fn=tf.nn.softmax)
         self.valueOutput=nn.fully_connected(l2, 1, activation_fn=None)
     
     def buildLoss(self):
@@ -37,8 +39,9 @@ class Evaluator():
         self.Vs1=tf.placeholder(tf.float32)
         self.rewards=tf.placeholder(tf.float32)
         self.isTerminal=tf.placeholder(tf.float32)
+
         #Convert actions to hot encode
-        self.a_hot_encoded=tf.one_hot(self.actions, self.num_actions)
+        self.a_hot_encoded=tf.one_hot(self.actions, FLAGS.num_actions)
         
         with tf.variable_scope('policy_loss'):
             self.policyLoss=tf.reduce_mean(-tf.reduce_sum(self.a_hot_encoded * tf.log(self.policyOutput + 1e-9) + (1-self.a_hot_encoded)*tf.log(1-self.policyOutput + 1e-9),axis=-1))
@@ -56,10 +59,17 @@ class Evaluator():
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
         
         self.training=tf.summary.merge([
-            tf.summary.scalar('policy_loss', self.policyLoss),
-            tf.summary.scalar('value_loss', self.valueLoss),
-            tf.summary.scalar('Total_loss', self.totLoss)
+            tf.summary.scalar('Actor_policy_loss', self.policyLoss),
+            tf.summary.scalar('Actor_value_loss', self.valueLoss),
+            tf.summary.scalar('Actor_tot_loss', self.totLoss)
         ])
+
+        self.avgRew=tf.placeholder(tf.float32)
+        self.testing=tf.summary.merge([
+            tf.summary.scalar('Actor_avg_reward', self.avgRew)
+        ])
+    def save(self):
+        self.saver.save(self.sess, self.model_folder+"graph.ckpt")
 
     def predict(self, state):
         if (len(state.shape) == 1):
@@ -67,4 +77,4 @@ class Evaluator():
 
         policy, value=self.sess.run([self.policyOutput, self.valueOutput], feed_dict={self.X: state})
 
-        return policy, value
+        return np.squeeze(policy), np.squeeze(value)
