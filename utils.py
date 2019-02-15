@@ -1,18 +1,21 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import tensorflow as tf
 from tensorflow.contrib.tensorboard.plugins import projector
 
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 
 def saveImage(matrix,name):
     plt.imsave('debug/'+name+'.png', matrix)
 
 def preprocessingState(state):
     # cropping
-    s = state[30:-20]
+    s = state[FLAGS.gap:FLAGS.gap + FLAGS.img_size,:]
 
     #resizing
-    s = cv2.resize(s, dsize=(64, 64), interpolation=cv2.INTER_CUBIC)
+    #s = cv2.resize(s, dsize=(64, 64), interpolation=cv2.INTER_CUBIC)
     return s
 
 #Used to create the sprite to use to visualize the embeddings

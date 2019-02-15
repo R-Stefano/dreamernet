@@ -7,13 +7,12 @@ import numpy as np
 #3=DOWN
 
 class EnvWrap():
-    def __init__(self, init_skip, frame_skip, envName, image_preprocessing):
+    def __init__(self, init_skip, frame_skip, envName):
         self.init_frame_skip=init_skip
         self.frame_skip=frame_skip
         self.statesBuffer=[]
         self.actionsBuffer=[]
         self.env=gym.make(envName)
-        self.process_frame=image_preprocessing
 
     def run(self, simulation_epochs):
         for i in range(simulation_epochs):
@@ -21,9 +20,8 @@ class EnvWrap():
             s, d=self.initializeGame()
 
             while (not(d)):
-                if (self.process_frame):
-                    # quick state preprocessing
-                    s=preprocessingState(s)
+                # quick state preprocessing
+                s=preprocessingState(s)
                 self.statesBuffer.append(s)
 
                 #randomly sample action 0,1,2
@@ -33,10 +31,10 @@ class EnvWrap():
                 s, r, d=self.repeatStep(a+1)
 
                 if d:
-                    self.statesBuffer.append(np.zeros((64,64,3)))
+                    self.statesBuffer.append(np.zeros((self.statesBuffer[-1].shape)))
                     self.actionsBuffer.append(-1)
                 
-        return np.asarray(self.statesBuffer), np.asarray(self.actionsBuffer)
+        return np.asarray(self.statesBuffer).astype(int), np.asarray(self.actionsBuffer)
     
     def initializeGame(self):
         s = self.env.reset()

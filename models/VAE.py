@@ -7,10 +7,12 @@ FLAGS = flags.FLAGS
 class VAE():
     def __init__(self,sess):
         self.sess=sess
+
         #HYPERPARAMETERS
         self.model_folder='models/VAE/'
-
-        self.X=tf.placeholder(tf.float32, shape=[None, 64, 64, 3])
+        self.img_size=FLAGS.img_size
+        self.latent_dim=FLAGS.latent_dimension
+        self.X=tf.placeholder(tf.float32, shape=[None, self.img_size, self.img_size, 3])
 
         self.buildGraph()
         self.buildLoss()
@@ -32,30 +34,35 @@ class VAE():
         self.norm_x=self.X / 255.
         #Encoder
         with tf.variable_scope('encoder'):
-            enc_1=nn.conv2d(self.norm_x, 32, 4, stride=2, padding="VALID")
-            enc_2=nn.conv2d(enc_1, 64, 4, stride=2, padding="VALID")
-            enc_3=nn.conv2d(enc_2, 128, 4, stride=2, padding="VALID")
-            enc_4=nn.conv2d(enc_3, 256, 4, stride=2, padding="VALID")
+            enc_1=nn.conv2d(self.norm_x, 32, 3, stride=2)
+            enc_2=nn.conv2d(enc_1, 32, 3)
+            enc_3=nn.conv2d(enc_2, 64, 3, stride=2)
+            enc_4=nn.conv2d(enc_3, 64, 3)
+            enc_5=nn.conv2d(enc_4, 64, 3, stride=2)
+            enc_6=nn.conv2d(enc_5, 64, 3, stride=2)
+            enc_7=nn.conv2d(enc_6, 64, 3, stride=2)
 
-            enc_4_flat=nn.flatten(enc_4)
+            enc_8_flat=nn.flatten(enc_7)
         
         #Latent space
         with tf.variable_scope('latent_space'):
-            self.mean = nn.fully_connected(enc_4_flat, FLAGS.latent_dimension, activation_fn=None)
+            self.mean = nn.fully_connected(enc_8_flat, self.latent_dim, activation_fn=None)
             #Leave RELu to keep std always positive. Or use tf.exp(tf.log(self.std))
-            self.std = nn.fully_connected(enc_4_flat, FLAGS.latent_dimension)
+            self.std = nn.fully_connected(enc_8_flat, self.latent_dim, activation_fn=tf.nn.softplus)
 
-            self.latent = self.mean + self.std * tf.random.normal([FLAGS.latent_dimension])
+            self.latent = self.mean + self.std * tf.random.normal([self.latent_dim])
 
         #Decoder
         with tf.variable_scope('decoder'):
-            dec_1_flat=nn.fully_connected(self.latent, enc_4_flat.get_shape().as_list()[1])
+            dec_1_flat=nn.fully_connected(self.latent, enc_8_flat.get_shape().as_list()[1])
             dec_1_exp=tf.expand_dims(tf.expand_dims(dec_1_flat, -2), -2)
-            
-            dec_2=nn.conv2d_transpose(dec_1_exp, 128, 5, 2, padding="VALID")
-            dec_3=nn.conv2d_transpose(dec_2, 64, 5, 2, padding="VALID")
-            dec_4=nn.conv2d_transpose(dec_3, 32, 6, 2, padding="VALID")
-            self.output=nn.conv2d_transpose(dec_4, 3, 6, 2, padding="VALID", activation_fn=tf.nn.sigmoid)
+            dec_2=nn.conv2d_transpose(dec_1_exp, 64, 3, 2)
+            dec_3=nn.conv2d_transpose(dec_2, 64, 3, 5)
+            dec_4=nn.conv2d_transpose(dec_3, 32, 3, 2)
+            dec_5=nn.conv2d_transpose(dec_4, 32, 3, 2)
+            dec_6=nn.conv2d_transpose(dec_5, 32, 3, 2)
+
+            self.output=nn.conv2d_transpose(dec_6, 3, 3, 2, activation_fn=tf.nn.sigmoid)
     
     def buildLoss(self):
         with tf.variable_scope('reconstruction_loss'):
