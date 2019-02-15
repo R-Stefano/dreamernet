@@ -67,7 +67,11 @@ class VAE():
     
     def buildLoss(self):
         with tf.variable_scope('reconstruction_loss'):
-            self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.norm_x - self.output), axis=[1,2,3]))
+            if (FLAGS.MSE_error):
+                self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.norm_x - self.output), axis=[1,2,3]))
+            else:
+                self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(self.norm_x*tf.log(self.output + 1e-9) + (1-self.norm_x)*tf.log(1-self.output + 1e-9), axis=[1,2,3]))
+
         with tf.variable_scope('KL_loss'):
             self.KLLoss= tf.reduce_mean(self.beta*(-0.5 * tf.reduce_sum(1.0 + tf.log(self.std +1e-9) - tf.square(self.mean) - self.std ,axis=-1)))
 
