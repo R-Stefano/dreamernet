@@ -12,6 +12,7 @@ class VAE():
         self.model_folder='models/VAE/'
         self.img_size=FLAGS.img_size
         self.latent_dim=FLAGS.latent_dimension
+        self.beta=FLAGS.beta
         self.X=tf.placeholder(tf.float32, shape=[None, self.img_size, self.img_size, 3])
 
         self.buildGraph()
@@ -68,7 +69,7 @@ class VAE():
         with tf.variable_scope('reconstruction_loss'):
             self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.norm_x - self.output), axis=[1,2,3]))
         with tf.variable_scope('KL_loss'):
-            self.KLLoss= tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + tf.log(self.std +1e-9) - tf.square(self.mean) - self.std ,axis=-1))
+            self.KLLoss= tf.reduce_mean(self.beta*(-0.5 * tf.reduce_sum(1.0 + tf.log(self.std +1e-9) - tf.square(self.mean) - self.std ,axis=-1)))
 
         self.totLoss = self.reconstr_loss + self.KLLoss
 
