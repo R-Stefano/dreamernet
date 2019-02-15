@@ -3,7 +3,6 @@ from models import VAE
 from trainer import Trainer
 from EnvWrapper import EnvWrap
 import matplotlib.pyplot as plt
-%matplotlib inline
 import numpy as np
 flags = tf.app.flags
 FLAGS = flags.FLAGS
