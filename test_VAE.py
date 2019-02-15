@@ -33,7 +33,7 @@ with tf.Session() as sess:
     else:
         idxs=np.random.randint(0, frames.shape[0], 2)
         inputs=frames[idxs]
-        '''
+        
         out=vae.decode(vae.encode(inputs))
         out=(out*255).astype(int)
         
@@ -43,8 +43,4 @@ with tf.Session() as sess:
         axarr[1,0].imshow(inputs[1])
         axarr[1,1].imshow(out[1])
 
-        plt.show()
-        '''
-
-        plt.imshow(inputs[0]-inputs[1])
         plt.show()
