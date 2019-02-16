@@ -19,7 +19,6 @@ class RNN():
         
         self.buildGraph()
         self.buildLoss()
-        self.sess.run(tf.global_variables_initializer())
 
         #Save/restore only the weights variables
         vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -29,6 +28,7 @@ class RNN():
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('RNN weights have been restored')
         else:
+            self.sess.run(tf.global_variables_initializer())
             self.buildUtils()
 
     
@@ -36,45 +36,64 @@ class RNN():
         #initialize init state
         self.init_state=tf.placeholder(tf.float32, [self.num_layers, 2, None, self.hidden_units])
 
-        init_state = tuple([tf.nn.rnn_cell.LSTMStateTuple(
-            self.init_state[l][0],
-            self.init_state[l][1]) 
-            for l in range(self.num_layers)])
+        with tf.variable_scope('LSTM'):        
+            init_state = tuple([tf.nn.rnn_cell.LSTMStateTuple(
+                self.init_state[l][0],
+                self.init_state[l][1]) 
+                for l in range(self.num_layers)])
 
-        layers=[]
-        for i in range(self.num_layers):
-            #Define the LSTM cell with the number of hidden units
-            cell=tf.nn.rnn_cell.LSTMCell(self.hidden_units, name="LSTM_"+str(i))
-            layers.append(cell)
+            layers=[]
+            for i in range(self.num_layers):
+                #Define the LSTM cell with the number of hidden units
+                cell=tf.nn.rnn_cell.LSTMCell(self.hidden_units, name="LSTM_"+str(i))
+                layers.append(cell)
 
-        self.lstm_cell = tf.contrib.rnn.MultiRNNCell(layers)
+            self.lstm_cell = tf.contrib.rnn.MultiRNNCell(layers)
 
-        #Feed an input of shape [batch_size, 10, state_rep_length]
-        #self.output is a tensor of shape [batch_size, 100, hidden_units]
-        #hidden_cell_statesTuple is a list of 2 elements: self.cell_state, self.hidden_state where self.output[:, -1, :]=self.cell_state
-        self.output, self.hidden_cell_statesTuple=tf.nn.dynamic_rnn(cell=self.lstm_cell, inputs=self.X, initial_state=init_state)
+            #Feed an input of shape [batch_size, 10, state_rep_length]
+            #self.output is a tensor of shape [batch_size, 100, hidden_units]
+            #hidden_cell_statesTuple is a list of 2 elements: self.cell_state, self.hidden_state where self.output[:, -1, :]=self.cell_state
+            self.output, self.hidden_cell_statesTuple=tf.nn.dynamic_rnn(cell=self.lstm_cell, inputs=self.X, initial_state=init_state)
 
-        flat=tf.reshape(self.output, (-1, self.hidden_units))
-        self.flat1=nn.fully_connected(flat, 256)
+        flat=tf.reshape(self.output, (-1, self.hidden_units), name="flat_LSTM_output")
 
-        self.mean=nn.fully_connected(self.flat1, self.latent_dimension + 1)
-        self.stddev=nn.fully_connected(self.flat1, self.latent_dimension + 1, activation_fn=tf.nn.softplus)
+        with tf.variable_scope('MLP'):        
+            self.flat1=nn.fully_connected(flat, 256)
 
-        self.next_state=self.mean + self.stddev * tf.random.normal([self.latent_dimension +1])
+        with tf.variable_scope('state_output'):        
+            self.mean=nn.fully_connected(self.flat1, self.latent_dimension)
+            self.stddev=nn.fully_connected(self.flat1, self.latent_dimension, activation_fn=tf.nn.softplus)
+            self.next_state_out=self.mean + self.stddev * tf.random.normal([self.latent_dimension])
+        
+        with tf.variable_scope('reward_output'):
+            self.reward_out=nn.fully_connected(self.flat1, 1)
     
     def buildLoss(self):
         self.true_next_state=tf.placeholder(tf.float32, shape=[None, None, self.latent_dimension+1])
-        true_next=tf.reshape(self.true_next_state, (-1, self.latent_dimension+1))
+        with tf.variable_scope('prepare_labels'):
+            true_next=tf.reshape(self.true_next_state, (-1, self.latent_dimension+1))
+            true_next_state, true_reward=tf.split(true_next, [self.latent_dimension,1], 1)
 
-        #print MSE
-        self.loss=tf.reduce_mean(tf.reduce_sum(tf.square(true_next - self.next_state), axis=-1))
+        with tf.variable_scope('representation_loss'):
+            '''
+            self.term1=true_next_state*tf.log(self.next_state_out + 1e-9)
+            self.term2= (1-true_next_state)*tf.log(1-self.next_state_out + 1e-9)
+            summ=tf.reduce_sum(self.term1 + self.term2, axis=-1)
+            '''
+            self.representation_loss=tf.reduce_mean(tf.reduce_sum(tf.square(true_next_state - self.next_state_out),axis=-1))
+        with tf.variable_scope('reward_loss'):        
+            self.reward_loss=tf.reduce_mean(tf.square(true_reward -self.reward_out))
+
+        self.loss=self.representation_loss + self.reward_loss
 
         self.opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss)
     
     def buildUtils(self):
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
         self.training=tf.summary.merge([
-            tf.summary.scalar('RNN_loss', self.loss)
+            tf.summary.scalar('RNN_state_loss', self.representation_loss),
+            tf.summary.scalar('RNN_rew_loss', self.reward_loss),
+            tf.summary.scalar('RNN_tot_loss', self.loss)
         ])
 
         self.totLossPlace=tf.placeholder(tf.float32)
@@ -91,6 +110,7 @@ class RNN():
             #initialize hidden state and cell state to zeros 
             init_state=np.zeros((self.num_layers, 2, input.shape[0], self.hidden_units))
 
-        nextStates, hidden_state=self.sess.run([self.next_state,self.hidden_cell_statesTuple], feed_dict={self.X: input,
+        nextStates, rew, hidden_state=self.sess.run([self.next_state_out, self.reward_out,self.hidden_cell_statesTuple], feed_dict={self.X: input,
                                                              self.init_state: init_state})
-        return nextStates, hidden_state[-1]
+
+        return np.concatenate((nextStates,rew),axis=-1), hidden_state[-1]

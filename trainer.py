@@ -70,7 +70,6 @@ class Trainer():
                                                          rnn.true_next_state: labelData,
                                                          rnn.init_state: init_state})
             rnn.file.add_summary(summ, ep)
-
             #Saving and testing
             if ep % 50 ==0:
                 print('Saving RNN..')
@@ -177,20 +176,17 @@ class Trainer():
 
         num_prevSteps=(timesteps-1)
 
-        #random select 32 states (-2 to prevent to retrieve the last future action)
-        s_idxs=np.random.randint(0, (dataset[0].shape[0]-2), 32)
+        #random select 32 states (-1 to prevent to retrieve the last future action)
+        s_idxs=np.random.randint(timesteps, (dataset[0].shape[0]-1), 32)
         for i,s_i in enumerate(s_idxs):
-            if (s_i< timesteps):
-                s_i=timesteps
-            else:
-                #retrieve the timesteps-1 previous states and actions
-                seqStates=dataset[0][(s_i-num_prevSteps):(s_i+1)]
-                seqActions=np.expand_dims(dataset[1][(s_i-num_prevSteps):(s_i+1)], axis=-1)
-                inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
-                #retrieve the states and actions shifted in the future by 1
-                seqStates=dataset[0][(s_i-num_prevSteps+1):(s_i+2)]
-                seqActions=np.expand_dims(dataset[1][(s_i-num_prevSteps+1):(s_i+2)], axis=-1)
-                labelData[i]=np.concatenate((seqStates, seqActions), axis=-1)
+            #retrieve the timesteps-1 previous states and actions
+            seqStates=dataset[0][(s_i-num_prevSteps):(s_i+1)]
+            seqActions=np.expand_dims(dataset[1][(s_i-num_prevSteps):(s_i+1)], axis=-1)
+            inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
+            #retrieve the states and actions shifted in the future by 1
+            seqStates=dataset[0][(s_i-num_prevSteps+1):(s_i+2)]
+            seqActions=np.expand_dims(dataset[1][(s_i-num_prevSteps+1):(s_i+2)], axis=-1)
+            labelData[i]=np.concatenate((seqStates, seqActions), axis=-1)
         '''
 
         num_prevSteps=(timesteps-1)

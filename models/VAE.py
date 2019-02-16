@@ -17,7 +17,6 @@ class VAE():
 
         self.buildGraph()
         self.buildLoss()
-        self.sess.run(tf.global_variables_initializer())
 
         #Save/restore only the weights variables
         vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -27,6 +26,7 @@ class VAE():
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('VAE weights have been restored')
         else:
+            self.sess.run(tf.global_variables_initializer())
             self.buildUtils()
 
 
