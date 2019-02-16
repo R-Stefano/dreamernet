@@ -12,10 +12,10 @@ def saveImage(matrix,name):
 
 def preprocessingState(state):
     # cropping
-    s = state[FLAGS.gap:FLAGS.gap + FLAGS.img_size,:]
+    s = state[FLAGS.gap:FLAGS.gap + FLAGS.crop_size,:]
 
     #resizing
-    #s = cv2.resize(s, dsize=(64, 64), interpolation=cv2.INTER_CUBIC)
+    s = cv2.resize(s, dsize=(FLAGS.img_size, FLAGS.img_size), interpolation=cv2.INTER_CUBIC)
     return s
 
 #Used to create the sprite to use to visualize the embeddings

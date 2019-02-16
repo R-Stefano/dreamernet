@@ -12,6 +12,7 @@ class EnvWrap():
         self.frame_skip=frame_skip
         self.statesBuffer=[]
         self.actionsBuffer=[]
+        self.rewardsBuffer=[]
         self.env=gym.make(envName)
 
     def run(self, simulation_epochs):
@@ -20,25 +21,27 @@ class EnvWrap():
             s, d=self.initializeGame()
 
             while (not(d)):
+                #self.env.render()
+                #input('wait')
                 # quick state preprocessing
                 s=preprocessingState(s)
                 self.statesBuffer.append(s)
 
                 #randomly sample action 0,1,2
-                a = np.random.randint(3)
+                a = self.env.action_space.sample()#np.random.randint(3)
                 self.actionsBuffer.append(a)
 
-                s, r, d=self.repeatStep(a+1)
+                s, r, d=self.repeatStep(a) #a+1 for pong
+                self.rewardsBuffer.append(r)
 
-                if d:
+                if (d):
                     self.statesBuffer.append(np.zeros((self.statesBuffer[-1].shape)))
                     self.actionsBuffer.append(-1)
                 
-        return np.asarray(self.statesBuffer).astype(int), np.asarray(self.actionsBuffer)
+        return np.asarray(self.statesBuffer).astype(int), np.asarray(self.actionsBuffer), np.asarray(self.rewardsBuffer)
     
     def initializeGame(self):
         s = self.env.reset()
-        d = False
 
         #wait that the environment is ready
         for i in range(self.init_frame_skip):

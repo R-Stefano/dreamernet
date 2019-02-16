@@ -7,11 +7,12 @@ FLAGS = flags.FLAGS
 class ACTOR():
     def __init__(self,sess):
         self.sess=sess
-        self.X=tf.placeholder(tf.float32, shape=[None, FLAGS.latent_dimension,])
-
         self.model_folder='models/ACTOR/'
 
+        self.latent_dimension=FLAGS.latent_dimension
+        self.num_actions=FLAGS.num_actions
 
+        self.X=tf.placeholder(tf.float32, shape=[None, self.latent_dimension])
         self.buildGraph()
         self.buildLoss()
         self.sess.run(tf.global_variables_initializer())
@@ -28,11 +29,16 @@ class ACTOR():
 
     
     def buildGraph(self):
-        l1 = nn.fully_connected(self.X, 128)
-        l2 = nn.fully_connected(l1, 256)
+        x=self.X
+        self.setups={
+            'MLP': [nn.fully_connected(x, 128), nn.fully_connected(x, 256)]
+        }
 
-        self.policyOutput=nn.fully_connected(l2, FLAGS.num_actions, activation_fn=tf.nn.softmax)
-        self.valueOutput=nn.fully_connected(l2, 1, activation_fn=None)
+        for l in self.setups['MLP']:
+            x=l
+
+        self.policyOutput=nn.fully_connected(x, self.num_actions, activation_fn=tf.nn.softmax)
+        self.valueOutput=nn.fully_connected(x, 1, activation_fn=None)
     
     def buildLoss(self):
         self.actions=tf.placeholder(tf.int32)
