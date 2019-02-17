@@ -16,7 +16,7 @@ flags.DEFINE_integer('num_actions', 3, 'Number of possible actions in the enviro
 flags.DEFINE_integer('gap', 40, 'How much crop from the top of the image')
 flags.DEFINE_integer('init_frame_skip', 30, 'Number of frames to skip at the beginning of each game')
 flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
-flags.DEFINE_string('env', 'AssaultNoFrameskip-v0', 'The environment to use') #AirRaidNoFrameskip-v0 #CarRacing-v0 #BreakoutNoFrameskip-v0
+flags.DEFINE_string('env', 'CarRacing-v0', 'The environment to use') #AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0
 flags.DEFINE_integer('games', 3 , 'Number of times run the environment to create the data')
 
 #VAE
@@ -26,7 +26,7 @@ flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train V
 flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')
 #VAE HYPERPARAMETERS
-flags.DEFINE_integer('latent_dimension', 256, 'latent dimension')
+flags.DEFINE_integer('latent_dimension', 128, 'latent dimension')
 flags.DEFINE_float('beta', 1, 'Disentangled Hyperparameter')
 
 #RNN
@@ -63,7 +63,7 @@ frames, actions, rewards=env.run(FLAGS.games)
 #Training VAE
 if(FLAGS.training_VAE):
     trainer.trainVAE(frames, vae)
-    
+
 if (FLAGS.testing_VAE):
     idxs=np.random.randint(0, frames.shape[0], 4)
     inputs=frames[idxs]

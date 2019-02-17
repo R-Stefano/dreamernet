@@ -21,8 +21,8 @@ class EnvWrap():
             s, d=self.initializeGame()
 
             while (not(d)):
-                #self.env.render()
-                #input('wait')
+                self.env.render()
+                input('wait')
                 # quick state preprocessing
                 s=preprocessingState(s)
                 self.statesBuffer.append(s)
