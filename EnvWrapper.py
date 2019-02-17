@@ -1,7 +1,7 @@
 from utils import preprocessingState
 import gym
 import numpy as np
-
+import matplotlib.pyplot as plt
 #1=NOOP
 #2=UP
 #3=DOWN
@@ -21,7 +21,7 @@ class EnvWrap():
             s, d=self.initializeGame()
 
             while (not(d)):
-                #self.env.render()
+                self.env.render()
                 #input('wait')
                 # quick state preprocessing
                 s=preprocessingState(s)
@@ -36,8 +36,9 @@ class EnvWrap():
 
                 if (d):
                     self.statesBuffer.append(np.zeros((self.statesBuffer[-1].shape)))
-                    self.actionsBuffer.append(-1)
-                
+                    self.actionsBuffer.append(a)
+                    self.rewardsBuffer.append(r)
+
         return np.asarray(self.statesBuffer).astype(int), np.asarray(self.actionsBuffer), np.asarray(self.rewardsBuffer)
     
     def initializeGame(self):

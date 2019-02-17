@@ -17,20 +17,17 @@ class VAE():
 
         self.buildGraph()
         self.buildLoss()
+        self.buildUtils()
 
         #Save/restore only the weights variables
-        vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.saver=tf.train.Saver(var_list=vars)
+        self.saver=tf.train.Saver()
 
         if not(FLAGS.training_VAE):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('VAE weights have been restored')
         else:
             self.sess.run(tf.global_variables_initializer())
-            self.buildUtils()
 
-
-    
     def buildGraph(self):
         self.norm_x=self.X / 255.
         #Encoder
@@ -81,6 +78,12 @@ class VAE():
             tf.summary.scalar('VAE_reconstruction_loss', self.reconstr_loss),
             tf.summary.scalar('VAE_KL_loss', self.KLLoss),
             tf.summary.scalar('VAE_total_loss', self.totLoss)
+        ])
+
+        self.playing=tf.summary.merge([
+            tf.summary.scalar('VAE_game_reconstruction_loss', self.reconstr_loss),
+            tf.summary.scalar('VAE_game_KL_loss', self.KLLoss),
+            tf.summary.scalar('VAE_game_total_loss', self.totLoss)
         ])
 
         self.recLossPlace=tf.placeholder(tf.float32)

@@ -12,20 +12,19 @@ class ACTOR():
         self.latent_dimension=FLAGS.latent_dimension
         self.num_actions=FLAGS.num_actions
 
-        self.X=tf.placeholder(tf.float32, shape=[None, self.latent_dimension])
+        self.X=tf.placeholder(tf.float32, shape=[None, FLAGS.ACTOR_input_size])
         self.buildGraph()
         self.buildLoss()
-        self.sess.run(tf.global_variables_initializer())
+        self.buildUtils()
 
         #Save/restore only the weights variables
-        vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.saver=tf.train.Saver(var_list=vars)
+        self.saver=tf.train.Saver()
 
         if not(FLAGS.training_ACTOR):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('ACTOR weights have been restored')
         else:
-            self.buildUtils()
+            self.sess.run(tf.global_variables_initializer())
 
     
     def buildGraph(self):
@@ -41,10 +40,10 @@ class ACTOR():
         self.valueOutput=nn.fully_connected(x, 1, activation_fn=None)
     
     def buildLoss(self):
-        self.actions=tf.placeholder(tf.int32)
-        self.Vs1=tf.placeholder(tf.float32)
-        self.rewards=tf.placeholder(tf.float32)
-        self.isTerminal=tf.placeholder(tf.float32)
+        self.actions=tf.placeholder(tf.int32, shape=[None, 1])
+        self.Vs1=tf.placeholder(tf.float32, shape=[None, 1])
+        self.rewards=tf.placeholder(tf.float32, shape=[None, 1])
+        self.isTerminal=tf.placeholder(tf.float32, shape=[None, 1])
 
         #Convert actions to hot encode
         self.a_hot_encoded=tf.one_hot(self.actions, FLAGS.num_actions)
@@ -63,17 +62,15 @@ class ACTOR():
     def buildUtils(self):
         #Create file
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
+        self.avgRew=tf.placeholder(tf.float32)
         
         self.training=tf.summary.merge([
             tf.summary.scalar('Actor_policy_loss', self.policyLoss),
             tf.summary.scalar('Actor_value_loss', self.valueLoss),
-            tf.summary.scalar('Actor_tot_loss', self.totLoss)
-        ])
-
-        self.avgRew=tf.placeholder(tf.float32)
-        self.testing=tf.summary.merge([
+            tf.summary.scalar('Actor_tot_loss', self.totLoss),
             tf.summary.scalar('Actor_avg_reward', self.avgRew)
         ])
+
     def save(self):
         self.saver.save(self.sess, self.model_folder+"graph.ckpt")
 

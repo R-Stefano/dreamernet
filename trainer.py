@@ -6,11 +6,13 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 class Trainer():
-    def trainVAE(self,frames, vae):
+    def prepareVAE(self,frames, vae):
         print('Starting VAE training..')
-        training_epoches=FLAGS.VAE_training_epoches
+        training_epoches=FLAGS.VAE_training_epoches +1
         train_batch_size=FLAGS.VAE_train_size
         test_batch_size=FLAGS.VAE_test_size
+
+        np.random.shuffle(frames)
 
         train_dataset=frames[:int(len(frames)*0.75)]
         test_dataset=frames[int(len(frames)*0.75):]
@@ -49,14 +51,19 @@ class Trainer():
                 summ = vae.sess.run(vae.testTensorboard, feed_dict={vae.recLossPlace: (rec_loss/avg), vae.klLossPlace: (kl_loss/avg), vae.totLossPlace: (tot_loss/avg)})
                 vae.file.add_summary(summ, ep)
 
-    def trainRNN(self,frames, actions, rewards, rnn):
+    def prepareRNN(self,frames, actions, rewards, rnn):
         print('Starting RNN training..')
-        training_epoches=FLAGS.RNN_training_epoches
+        training_epoches=FLAGS.RNN_training_epoches +1
         train_batch_size=FLAGS.RNN_train_size
         test_batch_size=FLAGS.RNN_test_size
 
-        train_dataset=(frames[:int(len(frames)*0.75)], actions[:int(len(frames)*0.75)], rewards[:int(len(frames)*0.75)])
-        test_dataset=(frames[int(len(frames)*0.75):], actions[int(len(frames)*0.75):], rewards[int(len(frames)*0.75):])
+        train_dataset={'embeds':frames[:int(len(frames)*0.75)], 
+                       'actions': actions[:int(len(frames)*0.75)], 
+                       'rews': rewards[:int(len(frames)*0.75)]}
+
+        test_dataset={'embeds':frames[int(len(frames)*0.75):],
+                      'actions':actions[int(len(frames)*0.75):], 
+                      'rews': rewards[int(len(frames)*0.75):]}
 
         for ep in range(training_epoches):
             print('Training RNN, epoch ({}/{})'.format(ep,training_epoches))
@@ -78,7 +85,7 @@ class Trainer():
                 totLoss=0
                 avg=0
                 print('Testing RNN..')
-                for b in range(len(test_dataset[0])//test_batch_size):
+                for b in range(test_dataset['embeds'].shape[0]//test_batch_size):
                     inputData, labelData = self.prepareRNNData(test_batch_size, rnn.sequence_length, rnn.latent_dimension, test_dataset)
 
                     #initialize hidden state and cell state to zeros 
@@ -93,6 +100,28 @@ class Trainer():
 
                 summ = rnn.sess.run(rnn.testing, feed_dict={rnn.totLossPlace: (totLoss/avg)})
                 rnn.file.add_summary(summ, ep)
+
+    #Used to retrieve a sequence of 10 timesteps and action plus the target state embedding
+    def prepareRNNData(self, batch_size, timesteps, features, dataset):
+        inputData=np.zeros((batch_size, timesteps, features + FLAGS.actions_size))#+1 is action
+        labelData=np.zeros((batch_size, timesteps, features +1))#+1 is reward
+
+        #random select 32 states (-1 to avoid to predict the frame after the last frame)
+        s_idxs=np.random.randint(timesteps, (dataset['embeds'].shape[0]-1), 32)
+
+        for i,end in enumerate(s_idxs):
+            start=end-timesteps
+            #retrieve the timesteps-1 previous states and actions
+            seqStates=dataset['embeds'][start:end]
+            seqActions=np.expand_dims(dataset['actions'][start:end], axis=-1)
+            inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
+
+            #retrieve the rewards and the states shifted by 1 in the future
+            seqStates=dataset['embeds'][start+1:end+1]
+            seqRews=np.expand_dims(dataset['rews'][start:end], axis=-1)
+            labelData[i]=np.concatenate((seqStates, seqRews), axis=-1)
+        return inputData, labelData
+
 
     #Called to train alphazero using everything.
     def trainActor(self,mcts, vae, rnn, env, actor):
@@ -168,59 +197,3 @@ class Trainer():
                 isTerminal.append(d)
                 s=s1
         return states, actions, rewards, isTerminal
-
-    #Used to retrieve a sequence of 10 timesteps and action plus the target state embedding
-    def prepareRNNData(self, batch_size, timesteps, features, dataset):
-        inputData=np.zeros((batch_size, timesteps, features + 1))#+1 is action
-        labelData=np.zeros((batch_size, timesteps, features +1))#+1 is reward
-
-        num_prevSteps=(timesteps-1)
-
-        #random select 32 states (-1 to prevent to retrieve the last future action)
-        s_idxs=np.random.randint(timesteps, (dataset[0].shape[0]-1), 32)
-        for i,s_i in enumerate(s_idxs):
-            #retrieve the timesteps-1 previous states and actions
-            seqStates=dataset[0][(s_i-num_prevSteps):(s_i+1)]
-            seqActions=np.expand_dims(dataset[1][(s_i-num_prevSteps):(s_i+1)], axis=-1)
-            inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
-            #retrieve the states and actions shifted in the future by 1
-            seqStates=dataset[0][(s_i-num_prevSteps+1):(s_i+2)]
-            seqActions=np.expand_dims(dataset[1][(s_i-num_prevSteps+1):(s_i+2)], axis=-1)
-            labelData[i]=np.concatenate((seqStates, seqActions), axis=-1)
-        '''
-
-        num_prevSteps=(timesteps-1)
-        #Store the idx of terminal states. Avoid training
-        #using a sequence coming from 2 different games
-        terminal_idxs=np.argwhere(np.asarray(dataset[1])==-1)
-        #Generate the timesteps for each batch
-        i=0
-        while (i < batch_size):
-            idx=np.random.randint(0, (len(dataset[0])-timesteps-1))
-
-            #check that it is not terminal state
-            if(not(np.any(terminal_idxs==idx))):
-                if(idx<num_prevSteps):
-                    #pad the first transitions with zeros 
-                    states=np.asarray(dataset[0][:(idx+1)])
-                    num_pads=(timesteps-states.shape[0])
-                    zeros_pad=np.zeros((num_pads, features))
-                    states=np.concatenate((zeros_pad, states), axis=0)
-
-                    #pad the first actions with zeros
-                    actions=np.expand_dims(np.asarray(dataset[1][:(idx+1)]), axis=-1)
-                    zeros_pad=np.zeros((num_pads,1))
-                    actions=np.concatenate((zeros_pad, actions), axis=0)
-                else:
-                    #retrieve state and the 9 previous states
-                    states=np.asarray(dataset[0][(idx-num_prevSteps):(idx+1)])
-                    #retrieve the action and the 9 previous actions
-                    actions=np.expand_dims(np.asarray(dataset[1][(idx-num_prevSteps):(idx+1)]), axis=-1)
-
-                inputData[i]=np.concatenate((states, actions), axis=-1)
-
-                #Retrieve the target state s' and the reward coming from s+a
-                labelData[i]=np.array(np.append(dataset[0][idx+1], dataset[2][idx]))
-                i+=1
-        '''
-        return inputData, labelData

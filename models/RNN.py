@@ -15,21 +15,19 @@ class RNN():
         self.hidden_units=FLAGS.hidden_units
         self.num_layers=FLAGS.LSTM_layers
 
-        self.X=tf.placeholder(tf.float32, shape=[None, None, self.latent_dimension+1])
+        self.X=tf.placeholder(tf.float32, shape=[None, None, self.latent_dimension+ FLAGS.actions_size])
         
         self.buildGraph()
         self.buildLoss()
+        self.buildUtils()
 
-        #Save/restore only the weights variables
-        vars=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.saver=tf.train.Saver(var_list=vars)
+        self.saver=tf.train.Saver()
 
         if not(FLAGS.training_RNN):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('RNN weights have been restored')
         else:
             self.sess.run(tf.global_variables_initializer())
-            self.buildUtils()
 
     
     def buildGraph(self):
@@ -96,6 +94,12 @@ class RNN():
             tf.summary.scalar('RNN_tot_loss', self.loss)
         ])
 
+        self.playing=tf.summary.merge([
+            tf.summary.scalar('RNN_game_state_loss', self.representation_loss),
+            tf.summary.scalar('RNN_game_rew_loss', self.reward_loss),
+            tf.summary.scalar('RNN_game_tot_loss', self.loss)
+        ])
+
         self.totLossPlace=tf.placeholder(tf.float32)
 
         self.testing=tf.summary.merge([
@@ -105,12 +109,12 @@ class RNN():
     def save(self):
         self.saver.save(self.sess, self.model_folder+"graph.ckpt")
 
-    def predict(self, input, initialize=None):
-        if (initialize==None):
+    def predict(self, input, initialize=[]):
+        if (len(initialize)==0):
             #initialize hidden state and cell state to zeros 
-            init_state=np.zeros((self.num_layers, 2, input.shape[0], self.hidden_units))
+            initialize=np.zeros((self.num_layers, 2, input.shape[0], self.hidden_units))
 
         nextStates, rew, hidden_state=self.sess.run([self.next_state_out, self.reward_out,self.hidden_cell_statesTuple], feed_dict={self.X: input,
-                                                             self.init_state: init_state})
+                                                             self.init_state: initialize})
 
-        return np.concatenate((nextStates,rew),axis=-1), hidden_state[-1]
+        return np.concatenate((nextStates,rew),axis=-1), hidden_state[0]
