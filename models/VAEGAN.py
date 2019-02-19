@@ -36,7 +36,7 @@ class VAEGAN():
         #Save/restore only the weights variables
         self.saver=tf.train.Saver()
 
-        if not(FLAGS.training_VAE or FLAGS.training_GAN_Discriminator_real or FLAGS.training_GAN_Discriminator_fake):
+        if not(FLAGS.training_VAE or FLAGS.training_GAN):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('VAE weights have been restored')
         else:
@@ -93,6 +93,7 @@ class VAEGAN():
         with tf.variable_scope('VAE_loss'):
             with tf.variable_scope('reconstruction_loss'):
                 self.reconstr_loss=-tf.reduce_mean(tf.reduce_sum(self.gen_norm_x*tf.log(self.gen_output + 1e-9) + (1-self.gen_norm_x)*tf.log(1-self.gen_output + 1e-9), axis=[1,2,3]))
+                #MSE:self.reconstr_loss=tf.reduce_mean(tf.reduce_sum(tf.square(self.gen_norm_x - self.gen_output), axis=[1,2,3]))
 
             with tf.variable_scope('KL_loss'):
                 self.KLLoss= tf.reduce_mean(self.beta*(-0.5 * tf.reduce_sum(1.0 + tf.log(self.std +1e-9) - tf.square(self.mean) - self.std ,axis=-1)))
@@ -103,32 +104,38 @@ class VAEGAN():
             self.vae_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.vae_tot_loss, var_list=gen_vars)
 
         with tf.variable_scope('GAN_loss'):
-            self.gan_error=-tf.reduce_mean(self.disc_Y*tf.log(self.disc_output + 1e-9) + (1-self.disc_Y)*tf.log(1- self.disc_output + 1e-9))  
+            self.disc_error=-tf.reduce_mean(self.disc_Y*tf.log(self.disc_output + 1e-9) + (1-self.disc_Y)*tf.log(1- self.disc_output + 1e-9))
 
-            #called for training only discriminator on real data
-            self.disc_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.gan_error, var_list=dis_vars)
-            #called for training all gan on fake data
-            self.gan_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.gan_error)
+            #gen high error if discriminator output 0.9-1 (which means fake)
+            self.gen_error=-tf.reduce_mean(tf.log(1- self.disc_output + 1e-9))
+
+
+            #called for training discriminator
+            self.disc_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.disc_error, var_list=dis_vars)
+            #called for training generator
+            self.gen_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.gen_error, var_list=gen_vars)
 
     def buildAccuracy(self):
         self.real_acc=tf.reduce_mean(tf.cast(self.disc_output<=0.1, tf.int32))
         self.fake_acc=tf.reduce_mean(tf.cast(self.disc_output>=0.9, tf.int32))
+        self.fooling_acc=1-self.fake_acc
 
     def buildUtils(self):
         #Create file
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
 
-        with tf.name_scope('VAE_loss'):
+        with tf.name_scope('VAE_train'):
             self.training_vae=tf.summary.merge([
                 tf.summary.scalar('reconstruction_loss', self.reconstr_loss),
                 tf.summary.scalar('KL_loss', self.KLLoss),
                 tf.summary.scalar('total_loss', self.vae_tot_loss)
             ])
 
+        with tf.name_scope('VAE_test'):
             self.testing_vae=tf.summary.merge([
-                tf.summary.scalar('test_reconstruction_loss',self.reconstr_loss),
-                tf.summary.scalar('test_KL_loss',self.KLLoss),
-                tf.summary.scalar('test_total_loss',self.vae_tot_loss),
+                tf.summary.scalar('reconstruction_loss',self.reconstr_loss),
+                tf.summary.scalar('KL_loss',self.KLLoss),
+                tf.summary.scalar('total_loss',self.vae_tot_loss),
                 tf.summary.image('real_images', self.gen_X),
                 tf.summary.image('reconstruct_images', self.gen_output)
             ])
@@ -138,35 +145,44 @@ class VAEGAN():
         firstDisc=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="Discriminator/Conv/weights")[0][0][0][0][0]   
         lastDisc=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="Discriminator/fully_connected/weights")[0][0][0]
 
-        with tf.name_scope('GAN_loss_real_data'):
+        with tf.name_scope('Discriminator_train'):
             #here add 4 gradients: last disc, first disc, last gen, first gen
             #only the discriminator should change
             self.training_discriminator_real=tf.summary.merge([
-                tf.summary.scalar('discriminator_loss_real', self.gan_error),
-                tf.summary.scalar('discriminator_lastlayer_w:0', lastDisc),
-                tf.summary.scalar('discriminator_firstlayer_f:0', firstDisc),
-                tf.summary.scalar('generator(NOCHANGE)_lastlayer_w:0', lastGen),
-                tf.summary.scalar('generator(NOCHANGE)_firstlayer_f:0', firstGen)
+                tf.summary.scalar('discriminator_loss_real_imgs', self.disc_error),
             ])
 
-            self.testing_discriminator_real=tf.summary.merge([
-                tf.summary.scalar('discriminator_test_loss_real', self.real_acc)
-            ])
-
-        with tf.name_scope('GAN_loss_fake_data'):
             self.training_discriminator_fake=tf.summary.merge([
-                tf.summary.scalar('discriminator_loss_fake', self.gan_error),
+                tf.summary.scalar('discriminator_loss_fake_imgs', self.disc_error),
                 tf.summary.scalar('discriminator_lastlayer_w:0', lastDisc),
                 tf.summary.scalar('discriminator_firstlayer_f:0', firstDisc),
-                tf.summary.scalar('generator_lastlayer_w:0', lastGen),
-                tf.summary.scalar('generator_firstlayer_f:0', firstGen)
+                tf.summary.scalar('generator(shouldNotChange)_lastlayer_w:0', lastGen),
+                tf.summary.scalar('generator(shouldNotChange)_firstlayer_f:0', firstGen)
+            ])
+
+        with tf.name_scope('Discriminator_test'):        
+            self.testing_discriminator_real=tf.summary.merge([
+                tf.summary.scalar('discriminator_accuracy_real', self.real_acc)
             ])
 
             self.testing_discriminator_fake=tf.summary.merge([
-                tf.summary.scalar('discriminator_test_loss_fake', self.fake_acc),
+                tf.summary.scalar('discriminator_accuracy_fake', self.fake_acc)
+            ])     
+
+        with tf.name_scope('Generator_train'):
+            self.training_generator=tf.summary.merge([
+                tf.summary.scalar('generator_loss', self.disc_error),
+                tf.summary.scalar('generator_lastlayer_w:0', lastGen),
+                tf.summary.scalar('generator_firstlayer_f:0', firstGen),
+                tf.summary.scalar('discriminator(shouldNotChange)_lastlayer_w:0', lastDisc),
+                tf.summary.scalar('discriminator(shouldNotChange)_firstlayer_f:0', firstDisc),
+            ])
+        with tf.name_scope('Generator_test'):
+            self.testing_generator=tf.summary.merge([
+                tf.summary.scalar('generator_accuracy_fooling', self.fooling_acc),
                 tf.summary.image('real_images', self.gen_X),
                 tf.summary.image('reconstruct_images', self.gen_output)
-            ])
+            ])     
         '''
         self.playing=tf.summary.merge([
             tf.summary.scalar('VAE_game_reconstruction_loss', self.reconstr_loss),

@@ -11,6 +11,7 @@ class Trainer():
         GAN_epoches=FLAGS.GAN_epoches +1
         GAN_disc_train_real_epoches=FLAGS.GAN_disc_real_epoches +1
         GAN_disc_train_fake_epoches=FLAGS.GAN_disc_fake_epoches +1
+        GAN_gen_train_epoches=FLAGS.GAN_gen_epoches +1
 
         train_batch_size=FLAGS.VAE_train_size
         test_batch_size=FLAGS.VAE_test_size
@@ -51,7 +52,7 @@ class Trainer():
                 #First train the discriminator on real images
                 for i in range(GAN_disc_train_real_epoches):
                     global_step=(ep*GAN_epoches) + i
-                    print('Training GAN discriminator on real data, epoch ({}/{})'.format(i,GAN_disc_train_real_epoches))
+                    print('Training Discriminator on real data, epoch ({}/{})'.format(i,GAN_disc_train_real_epoches))
                     #feed images and teach discrimantor that are real (label 0-0.1)
                     #Sample from frames generated
                     idxs=np.random.randint(0, train_dataset.shape[0], size=train_batch_size)
@@ -70,31 +71,49 @@ class Trainer():
                         _,summ = vae.sess.run([vae.real_acc,vae.testing_discriminator_real], feed_dict={vae.gen_output: batchData})
                         vae.file.add_summary(summ, global_step)
 
-                        vae.save()
-
                 #Second train the discriminator on fake images(vae output)
                 for i in range(GAN_disc_train_fake_epoches):
                     global_step=(ep*GAN_epoches) + i
-                    print('Training GAN discriminator on fake data, epoch ({}/{})'.format(i,GAN_disc_train_fake_epoches))
+                    print('Training Discriminator on fake data, epoch ({}/{})'.format(i,GAN_disc_train_fake_epoches))
                     #feed images and teach discrimantor that are fake (label 0.9-1)
                     #Sample from frames generated
                     idxs=np.random.randint(0, train_dataset.shape[0], size=train_batch_size)
                     batchData=train_dataset[idxs]
 
                     real_labels=np.random.random(size=train_batch_size)*0.1+0.9
-                    _, summ = vae.sess.run([vae.gan_opt, vae.training_discriminator_fake], feed_dict={vae.gen_X: batchData,
+                    _,summ = vae.sess.run([vae.disc_opt, vae.training_discriminator_fake], feed_dict={vae.gen_X: batchData,
                                                                                                     vae.disc_Y: real_labels})
                     vae.file.add_summary(summ, global_step)
-
                     if i%5==0:
                         print('Testing Discriminator on fake data..')
                         idxs=np.random.randint(0, test_dataset.shape[0], size=test_batch_size)
                         batchData=test_dataset[idxs]
 
-                        _,summ = vae.sess.run([vae.fake_acc,vae.testing_discriminator_fake], feed_dict={vae.gen_X: batchData})
+                        summ = vae.sess.run(vae.testing_discriminator_fake, feed_dict={vae.gen_X: batchData})
                         vae.file.add_summary(summ, global_step)
 
-                        vae.save()
+                for i in range(GAN_gen_train_epoches):
+                    global_step=(ep*GAN_epoches) + i
+                    print('Training Generator, epoch ({}/{})'.format(i,GAN_gen_train_epoches))
+                    #feed images and teach discrimantor that are fake (label 0.9-1)
+                    #Sample from frames generated
+                    idxs=np.random.randint(0, train_dataset.shape[0], size=train_batch_size)
+                    batchData=train_dataset[idxs]
+
+                    real_labels=np.random.random(size=train_batch_size)*0.1+0.9
+                    _,summ = vae.sess.run([vae.gen_opt, vae.training_generator], feed_dict={vae.gen_X: batchData,
+                                                                                            vae.disc_Y: real_labels})
+                    vae.file.add_summary(summ, global_step)
+
+                    if i%5==0:
+                        print('Testing Generator..')
+                        idxs=np.random.randint(0, test_dataset.shape[0], size=test_batch_size)
+                        batchData=test_dataset[idxs]
+
+                        summ = vae.sess.run(vae.testing_generator, feed_dict={vae.gen_X: batchData})
+                        vae.file.add_summary(summ, global_step)
+
+                vae.save()
 
 
     def prepareRNN(self,frames, actions, rewards, rnn):
