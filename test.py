@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import shutil #clean folder for retraining
 import os
-from models import RNN, VAE
+from models import RNN, VAEGAN
 from trainer import Trainer
 from EnvWrapper import EnvWrap
 
@@ -20,10 +20,16 @@ flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
 flags.DEFINE_string('env', 'PongNoFrameskip-v0', 'The environment to use') #AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0
 flags.DEFINE_integer('games', 3 , 'Number of times run the environment to create the data')
 
-#VAE
-flags.DEFINE_boolean('training_VAE', False, 'If True, train the VAE model')
-flags.DEFINE_boolean('testing_VAE', False, 'If true testing the VAE')
-flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train VAE')
+#GAN
+flags.DEFINE_boolean('training_VAE', True, 'If True, train the VAE model')
+flags.DEFINE_boolean('training_GAN', True, 'If True, train the GAN model')
+flags.DEFINE_boolean('testing_VAEGAN', False, 'If true testing the VAEGAN')
+
+flags.DEFINE_integer('GAN_epoches', 100, 'Nmber of times to repeat real-fake training')
+flags.DEFINE_integer('GAN_disc_real_epoches', 100, 'Number of epoches to train the discriminator on real data')
+flags.DEFINE_integer('GAN_disc_fake_epoches', 100, 'number of epoches to train the discriminator on fake data')
+flags.DEFINE_integer('VAE_training_epoches', 1500, 'Number of epoches to train VAE')
+
 flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')
 #VAE HYPERPARAMETERS
@@ -31,7 +37,7 @@ flags.DEFINE_integer('latent_dimension', 64, 'latent dimension')
 flags.DEFINE_float('beta', 1, 'Disentangled Hyperparameter')
 
 #RNN
-flags.DEFINE_boolean('training_RNN', False, 'If True, train the RNN model')
+flags.DEFINE_boolean('training_RNN', True, 'If True, train the RNN model')
 flags.DEFINE_boolean('testing_RNN', False, 'If true testing the RNN')
 flags.DEFINE_integer('RNN_training_epoches', 2000, 'Number of epoches to train VAE')
 flags.DEFINE_integer('RNN_train_size', 32, 'Number of frames to feed at each epoch')
@@ -41,9 +47,9 @@ flags.DEFINE_integer('sequence_length', 100, 'Total number of states to feed to 
 flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
 flags.DEFINE_integer('LSTM_layers', 1, 'Number of the LSTM layers')
 
-if(FLAGS.training_VAE and (len(os.listdir('models/VAE/'))!=0)):
+if(FLAGS.training_VAE and (len(os.listdir('models/VAEGAN/'))!=0) and FLAGS.training_GAN):
     print('cleaning VAE folder')
-    shutil.rmtree('models/VAE/')#clean folder
+    shutil.rmtree('models/VAEGAN/')#clean folder
 if(FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0)):
     print('cleaning RNN folder')
     shutil.rmtree('models/RNN/')#clean folder
@@ -51,20 +57,14 @@ if(FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0)):
 vae_sess=tf.Session()
 rnn_sess=tf.Session()
 env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env)
-vae=VAE.VAE(vae_sess)
+vae=VAEGAN.VAEGAN(vae_sess)
 rnn=RNN.RNN(rnn_sess)
 trainer=Trainer()
 
 frames, actions, rewards=env.run(FLAGS.games)
 
-#frames=frames[:10]
-#for f in frames:
-#    plt.imshow(f)
-#    plt.show()
-
-#Training VAE
-if(FLAGS.training_VAE):
-    trainer.prepareVAE(frames.copy(), vae)
+#Training VAEGAN
+trainer.prepareVAEGAN(frames.copy(), vae)
 
 #Training RNN
 embeds=vae.encode(frames)
@@ -97,7 +97,7 @@ if(FLAGS.testing_RNN):
     
     print('avg error', np.mean(errors))
 
-if (FLAGS.testing_VAE):
+if (FLAGS.testing_VAEGAN):
     idxs=np.random.randint(0, frames.shape[0], 4)
     inputs=frames[idxs]
     
@@ -110,4 +110,3 @@ if (FLAGS.testing_VAE):
         axarr[i,1].imshow(out[i])
 
     plt.show()
-#Training the actor
