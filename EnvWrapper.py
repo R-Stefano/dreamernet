@@ -7,13 +7,14 @@ import matplotlib.pyplot as plt
 #3=DOWN
 
 class EnvWrap():
-    def __init__(self, init_skip, frame_skip, envName):
+    def __init__(self, init_skip, frame_skip, envName, renderGame):
         self.init_frame_skip=init_skip
         self.frame_skip=frame_skip
         self.statesBuffer=[]
         self.actionsBuffer=[]
         self.rewardsBuffer=[]
         self.env=gym.make(envName)
+        self.renderGame=renderGame
 
     def run(self, simulation_epochs):
         for i in range(simulation_epochs):
@@ -21,7 +22,8 @@ class EnvWrap():
             s, d=self.initializeGame()
 
             while (not(d)):
-                self.env.render()
+                if(self.renderGame):
+                    self.env.render()
                 #input('wait')
                 # quick state preprocessing
                 s=preprocessingState(s)

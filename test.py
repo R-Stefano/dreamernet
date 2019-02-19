@@ -19,6 +19,7 @@ flags.DEFINE_integer('init_frame_skip', 30, 'Number of frames to skip at the beg
 flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
 flags.DEFINE_string('env', 'PongNoFrameskip-v0', 'The environment to use') #AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0
 flags.DEFINE_integer('games', 3 , 'Number of times run the environment to create the data')
+flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 
 #GAN
 flags.DEFINE_boolean('training_VAE', True, 'If True, train the VAE model')
@@ -57,7 +58,7 @@ if(FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0)):
 
 vae_sess=tf.Session()
 rnn_sess=tf.Session()
-env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env)
+env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env, FLAGS.renderGame)
 vae=VAEGAN.VAEGAN(vae_sess)
 rnn=RNN.RNN(rnn_sess)
 trainer=Trainer()

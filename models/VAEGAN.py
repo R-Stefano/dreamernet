@@ -171,7 +171,7 @@ class VAEGAN():
 
         with tf.name_scope('Generator_train'):
             self.training_generator=tf.summary.merge([
-                tf.summary.scalar('generator_loss', self.disc_error),
+                tf.summary.scalar('generator_loss', self.gen_error),
                 tf.summary.scalar('generator_lastlayer_w:0', lastGen),
                 tf.summary.scalar('generator_firstlayer_f:0', firstGen),
                 tf.summary.scalar('discriminator(shouldNotChange)_lastlayer_w:0', lastDisc),
