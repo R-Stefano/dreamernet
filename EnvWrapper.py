@@ -35,12 +35,10 @@ class EnvWrap():
 
                 s, r, d=self.repeatStep(a) #a+1 for pong
                 self.rewardsBuffer.append(r)
-
                 if (d):
                     self.statesBuffer.append(np.zeros((self.statesBuffer[-1].shape)))
                     self.actionsBuffer.append(a)
                     self.rewardsBuffer.append(r)
-
         return np.asarray(self.statesBuffer).astype(int), np.asarray(self.actionsBuffer), np.asarray(self.rewardsBuffer)
     
     def initializeGame(self):

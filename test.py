@@ -7,18 +7,22 @@ from models import RNN, VAEGAN
 from trainer import Trainer
 from EnvWrapper import EnvWrap
 
+test_envs={
+    'frost':['FrostbiteNoFrameskip-v0', 18],
+    'pong':['PongNoFrameskip-v0', 6]
+}
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 #ENVIRONMENT #env basic is 210,160,3
 flags.DEFINE_integer('img_size', 96, 'dimension of the state to feed into the VAE')
 flags.DEFINE_integer('crop_size', 160, 'dimension of the state after crop')
 flags.DEFINE_integer('actions_size', 1, 'Number of actions in the environment. box2d is 3, ataray games is 1')
-flags.DEFINE_integer('num_actions', 6, 'Number of possible actions in the environment if action is discreate')
-flags.DEFINE_integer('gap', 35, 'How much crop from the top of the image')
+flags.DEFINE_integer('num_actions', 18, 'Number of possible actions in the environment if action is discreate')
+flags.DEFINE_integer('gap', 28, 'How much crop from the top of the image')
 flags.DEFINE_integer('init_frame_skip', 30, 'Number of frames to skip at the beginning of each game')
 flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
-flags.DEFINE_string('env', 'PongNoFrameskip-v0', 'The environment to use') #AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0
-flags.DEFINE_integer('games', 3 , 'Number of times run the environment to create the data')
+flags.DEFINE_string('env', 'FrostbiteNoFrameskip-v0', 'The environment to use') # AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0  #CrazyClimber #JourneyEscape #Tutankham
+flags.DEFINE_integer('games', 5 , 'Number of times run the environment to create the data')
 flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 
 #GAN
@@ -68,6 +72,9 @@ trainer=Trainer()
 
 frames, actions, rewards=env.run(FLAGS.games)
 
+for i in frames[:10]:
+    plt.imshow(i)
+    plt.show()
 #Training VAEGAN
 trainer.prepareVAEGAN(frames.copy(), vae)
 
