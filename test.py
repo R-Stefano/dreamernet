@@ -25,12 +25,15 @@ flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 flags.DEFINE_boolean('training_VAE', True, 'If True, train the VAE model')
 flags.DEFINE_boolean('training_GAN', True, 'If True, train the GAN model')
 flags.DEFINE_boolean('testing_VAEGAN', False, 'If true testing the VAEGAN')
+flags.DEFINE_boolean('use_only_GAN_loss', True, 'If true the error for the generator is only the abiity to fool the discriminator, else it is also added the VAE error')
+flags.DEFINE_integer('weight_VAE_loss', 0.5, 'If use_only_GAN_loss is False, this value decide the weight ot give to the VAE loss on the generator')
+
 
 flags.DEFINE_integer('GAN_epoches', 100, 'Nmber of times to repeat real-fake training')
 flags.DEFINE_integer('GAN_disc_real_epoches', 50, 'Number of epoches to train the discriminator on real data')
 flags.DEFINE_integer('GAN_disc_fake_epoches', 50, 'number of epoches to train the discriminator on fake data')
 flags.DEFINE_integer('GAN_gen_epoches', 50, 'number of epoches to train the discriminator on fake data')
-flags.DEFINE_integer('VAE_training_epoches', 100, 'Number of epoches to train VAE')
+flags.DEFINE_integer('VAE_training_epoches', 50, 'Number of epoches to train VAE')
 
 flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')

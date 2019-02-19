@@ -107,13 +107,20 @@ class VAEGAN():
             self.disc_error=-tf.reduce_mean(self.disc_Y*tf.log(self.disc_output + 1e-9) + (1-self.disc_Y)*tf.log(1- self.disc_output + 1e-9))
 
             #gen high error if discriminator output 0.9-1 (which means fake)
-            self.gen_error=-tf.reduce_mean(tf.log(1- self.disc_output + 1e-9))
-
+            if (FLAGS.use_only_GAN_loss):
+                self.gen_error=-tf.reduce_mean(tf.log(1- self.disc_output + 1e-9))
+            else:
+                self.gen_error=-tf.reduce_mean(tf.log(1- self.disc_output + 1e-9)) + FLAGS.weight_VAE_loss*self.vae_tot_loss
 
             #called for training discriminator
-            self.disc_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.disc_error, var_list=dis_vars)
+            opt_disc=tf.train.AdamOptimizer(learning_rate=1e-4)
+            self.grads_vars_disc=opt_disc.compute_gradients(self.disc_error, var_list=dis_vars)
+            self.disc_opt=opt_disc.apply_gradients(self.grads_vars_disc)
+
             #called for training generator
-            self.gen_opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.gen_error, var_list=gen_vars)
+            opt_gen=tf.train.AdamOptimizer(learning_rate=1e-4)
+            self.grads_vars_gen=opt_gen.compute_gradients(self.gen_error, var_list=gen_vars)
+            self.gen_opt=opt_disc.apply_gradients(self.grads_vars_gen)
 
     def buildAccuracy(self):
         self.real_acc=tf.reduce_mean(tf.cast(self.disc_output<=0.1, tf.int32))
@@ -140,24 +147,25 @@ class VAEGAN():
                 tf.summary.image('reconstruct_images', self.gen_output)
             ])
 
-        firstGen=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="generator/encoder/Conv/weights")[0][0][0][0][0]
-        lastGen=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="generator/decoder/Conv2d_transpose_5/weights")[0][0][0][0][0]
-        firstDisc=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="Discriminator/Conv/weights")[0][0][0][0][0]   
-        lastDisc=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="Discriminator/fully_connected/weights")[0][0][0]
+        #irstGen=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="generator/encoder/Conv/weights")[0][0][0][0][0]
+        #astGen=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="generator/decoder/Conv2d_transpose_5/weights")[0][0][0][0][0]
+        #irstDisc=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="Discriminator/Conv/weights")[0][0][0][0][0]   
+        #astDisc=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="Discriminator/fully_connected/weights")[0][0][0]
+
+        #firstGen=self.grads_vars_gen[0][0][0][0][0][0]
+        #lastGen=self.grads_vars_gen[-2][0][0][0][0][0]
+        #firstDisc=self.grads_vars_disc[0][0][0][0][0][0]  
+        #lastDisc=self.grads_vars_disc[-2][0][0][0]
 
         with tf.name_scope('Discriminator_train'):
             #here add 4 gradients: last disc, first disc, last gen, first gen
             #only the discriminator should change
             self.training_discriminator_real=tf.summary.merge([
-                tf.summary.scalar('discriminator_loss_real_imgs', self.disc_error),
+                tf.summary.scalar('discriminator_loss_real_imgs', self.disc_error)
             ])
 
             self.training_discriminator_fake=tf.summary.merge([
-                tf.summary.scalar('discriminator_loss_fake_imgs', self.disc_error),
-                tf.summary.scalar('discriminator_lastlayer_w:0', lastDisc),
-                tf.summary.scalar('discriminator_firstlayer_f:0', firstDisc),
-                tf.summary.scalar('generator(shouldNotChange)_lastlayer_w:0', lastGen),
-                tf.summary.scalar('generator(shouldNotChange)_firstlayer_f:0', firstGen)
+                tf.summary.scalar('discriminator_loss_fake_imgs', self.disc_error)
             ])
 
         with tf.name_scope('Discriminator_test'):        
@@ -171,11 +179,7 @@ class VAEGAN():
 
         with tf.name_scope('Generator_train'):
             self.training_generator=tf.summary.merge([
-                tf.summary.scalar('generator_loss', self.gen_error),
-                tf.summary.scalar('generator_lastlayer_w:0', lastGen),
-                tf.summary.scalar('generator_firstlayer_f:0', firstGen),
-                tf.summary.scalar('discriminator(shouldNotChange)_lastlayer_w:0', lastDisc),
-                tf.summary.scalar('discriminator(shouldNotChange)_firstlayer_f:0', firstDisc),
+                tf.summary.scalar('generator_loss', self.gen_error)
             ])
         with tf.name_scope('Generator_test'):
             self.testing_generator=tf.summary.merge([
