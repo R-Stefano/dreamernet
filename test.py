@@ -46,7 +46,7 @@ flags.DEFINE_integer('latent_dimension', 64, 'latent dimension')
 flags.DEFINE_float('beta', 1, 'Disentangled Hyperparameter')
 
 #RNN
-flags.DEFINE_boolean('training_RNN', True, 'If True, train the RNN model')
+flags.DEFINE_boolean('training_RNN', False, 'If True, train the RNN model')
 flags.DEFINE_boolean('testing_RNN', False, 'If true testing the RNN')
 flags.DEFINE_integer('RNN_training_epoches', 2000, 'Number of epoches to train VAE')
 flags.DEFINE_integer('RNN_train_size', 32, 'Number of frames to feed at each epoch')
