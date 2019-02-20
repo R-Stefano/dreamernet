@@ -26,18 +26,18 @@ flags.DEFINE_integer('games', 5 , 'Number of times run the environment to create
 flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 
 #GAN
-flags.DEFINE_boolean('training_VAE', True, 'If True, train the VAE model')
-flags.DEFINE_boolean('training_GAN', True, 'If True, train the GAN model')
+flags.DEFINE_boolean('training_VAE', False, 'If True, train the VAE model')
+flags.DEFINE_boolean('training_GAN', False, 'If True, train the GAN model')
 flags.DEFINE_boolean('testing_VAEGAN', False, 'If true testing the VAEGAN')
-flags.DEFINE_boolean('use_only_GAN_loss', True, 'If true the error for the generator is only the abiity to fool the discriminator, else it is also added the VAE error')
+flags.DEFINE_boolean('use_only_GAN_loss', False, 'If true the error for the generator is only the abiity to fool the discriminator, else it is also added the VAE error')
 flags.DEFINE_float('weight_VAE_loss', 0.5, 'If use_only_GAN_loss is False, this value decide the weight ot give to the VAE loss on the generator')
 
 
-flags.DEFINE_integer('GAN_epoches', 100, 'Nmber of times to repeat real-fake training')
+flags.DEFINE_integer('GAN_epoches', 10000, 'Nmber of times to repeat real-fake training')
 flags.DEFINE_integer('GAN_disc_real_epoches', 50, 'Number of epoches to train the discriminator on real data')
 flags.DEFINE_integer('GAN_disc_fake_epoches', 50, 'number of epoches to train the discriminator on fake data')
 flags.DEFINE_integer('GAN_gen_epoches', 50, 'number of epoches to train the discriminator on fake data')
-flags.DEFINE_integer('VAE_training_epoches', 50, 'Number of epoches to train VAE')
+flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train VAE')
 
 flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')
@@ -72,16 +72,31 @@ trainer=Trainer()
 
 frames, actions, rewards=env.run(FLAGS.games)
 
-for i in frames[:10]:
-    plt.imshow(i)
-    plt.show()
-#Training VAEGAN
-trainer.prepareVAEGAN(frames.copy(), vae)
+#for i in frames[:10]:
+#    plt.imshow(i)
+#    plt.show()
 
+if (FLAGS.training_GAN or FLAGS.training_VAE):
+    #Training VAEGAN
+    trainer.prepareVAEGAN(frames.copy(), vae)
+
+if (FLAGS.testing_VAEGAN):
+    idxs=np.random.randint(0, frames.shape[0], 4)
+    inputs=frames[idxs]
+    
+    out=vae.sess.run(vae.output, feed_dict={vae.X:inputs})#vae.decode(vae.encode(inputs))
+    out=(out*255).astype(int)
+    
+    f, axarr = plt.subplots(4,2)
+    for i in range(out.shape[0]):
+        axarr[i,0].imshow(inputs[i])
+        axarr[i,1].imshow(out[i])
+
+    plt.show()
 #Training RNN
 embeds=vae.encode(frames)
 if(FLAGS.training_RNN):
-    trainer.prepareRNN(embeds, actions, rewards, rnn)
+    trainer.prepareRNN(embeds, actions, rewards, rnn, vae)
 
 if(FLAGS.testing_RNN):
     idxs=np.random.randint(FLAGS.sequence_length, embeds.shape[0], 10)
@@ -108,17 +123,3 @@ if(FLAGS.testing_RNN):
         errors.append(err)
     
     print('avg error', np.mean(errors))
-
-if (FLAGS.testing_VAEGAN):
-    idxs=np.random.randint(0, frames.shape[0], 4)
-    inputs=frames[idxs]
-    
-    out=vae.sess.run(vae.output, feed_dict={vae.X:inputs})#vae.decode(vae.encode(inputs))
-    out=(out*255).astype(int)
-    
-    f, axarr = plt.subplots(4,2)
-    for i in range(out.shape[0]):
-        axarr[i,0].imshow(inputs[i])
-        axarr[i,1].imshow(out[i])
-
-    plt.show()

@@ -206,11 +206,13 @@ class VAEGAN():
         for batchStart in range(0, states.shape[0], FLAGS.VAE_test_size):
             batchEnd=batchStart+FLAGS.VAE_test_size
 
-            out=self.sess.run(self.latent, feed_dict={self.X: states[batchStart:batchEnd]})
+            out=self.sess.run(self.latent, feed_dict={self.gen_X: states[batchStart:batchEnd]})
             embeds[batchStart:batchEnd]=out
         return embeds
     
     def decode(self, embed):
+        if (len(embed.shape) == 1): #feeding single example
+            embed=np.expand_dims(embed, axis=0)
         out=self.sess.run(self.gen_output, feed_dict={self.latent: embed})
 
         return out

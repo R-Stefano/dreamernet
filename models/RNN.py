@@ -88,23 +88,28 @@ class RNN():
     
     def buildUtils(self):
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
-        self.training=tf.summary.merge([
-            tf.summary.scalar('RNN_state_loss', self.representation_loss),
-            tf.summary.scalar('RNN_rew_loss', self.reward_loss),
-            tf.summary.scalar('RNN_tot_loss', self.loss)
-        ])
 
-        self.playing=tf.summary.merge([
-            tf.summary.scalar('RNN_game_state_loss', self.representation_loss),
-            tf.summary.scalar('RNN_game_rew_loss', self.reward_loss),
-            tf.summary.scalar('RNN_game_tot_loss', self.loss)
-        ])
+        with tf.name_scope('RNN_train'):
+            self.training=tf.summary.merge([
+                tf.summary.scalar('state_loss', self.representation_loss),
+                tf.summary.scalar('rew_loss', self.reward_loss),
+                tf.summary.scalar('tot_loss', self.loss)
+            ])
 
-        self.totLossPlace=tf.placeholder(tf.float32)
+        with tf.name_scope('RNN_test'):
+            self.testing=tf.summary.merge([
+                tf.summary.scalar('state_loss', self.representation_loss),
+                tf.summary.scalar('rew_loss', self.reward_loss),
+                tf.summary.scalar('tot_loss', self.loss)
+            ])
 
-        self.testing=tf.summary.merge([
-            tf.summary.scalar('RNN_test_loss',self.totLossPlace)
-        ])
+            self.frame_s=tf.placeholder(tf.float32)
+            self.frame_s1=tf.placeholder(tf.float32)
+
+            self.predicting=tf.summary.merge([
+                tf.summary.image('frame_s', self.frame_s),
+                tf.summary.image('frame_s1', self.frame_s1)
+            ])
     
     def save(self):
         self.saver.save(self.sess, self.model_folder+"graph.ckpt")

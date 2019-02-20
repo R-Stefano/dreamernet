@@ -109,8 +109,7 @@ class Trainer():
                 vae.save()
 
 
-    def prepareRNN(self,frames, actions, rewards, rnn):
-        print('Starting RNN training..')
+    def prepareRNN(self,frames, actions, rewards, rnn, vaegan):
         training_epoches=FLAGS.RNN_training_epoches +1
         train_batch_size=FLAGS.RNN_train_size
         test_batch_size=FLAGS.RNN_test_size
@@ -137,29 +136,33 @@ class Trainer():
             rnn.file.add_summary(summ, ep)
             #Saving and testing
             if ep % 50 ==0:
+                inputData, labelData = self.prepareRNNData(test_batch_size, rnn.sequence_length, rnn.latent_dimension, test_dataset)
+
+                #initialize hidden state and cell state to zeros 
+                init_state=np.zeros((rnn.num_layers, 2, test_batch_size, rnn.hidden_units))
+
+                #Train
+                summ, out = rnn.sess.run([rnn.testing, rnn.next_state_out], feed_dict={rnn.X: inputData, 
+                                                            rnn.true_next_state: labelData,
+                                                            rnn.init_state: init_state})
+                rnn.file.add_summary(summ, ep)
+
+                #retrieve 3 random frames from a random batch and their correspective network predictions
+                expl=np.random.choice(test_batch_size)
+                idxs=np.random.choice(test_batch_size, 3)
+                frame_s=inputData[expl][idxs][:,:-1]
+                frames_s1=np.reshape(out, (test_batch_size, rnn.sequence_length, -1))[expl][idxs+1]
+                frames=vaegan.decode(np.concatenate((frame_s, frames_s1), axis=0))
+
+                #display in tensorboard
+                summ= rnn.sess.run(rnn.predicting, feed_dict={rnn.frame_s: frames[:3], 
+                                                            rnn.frame_s1: frames[3:]})
+                rnn.file.add_summary(summ, ep)
+                
                 print('Saving RNN..')
                 rnn.save()
 
-                totLoss=0
-                avg=0
-                print('Testing RNN..')
-                for b in range(test_dataset['embeds'].shape[0]//test_batch_size):
-                    inputData, labelData = self.prepareRNNData(test_batch_size, rnn.sequence_length, rnn.latent_dimension, test_dataset)
-
-                    #initialize hidden state and cell state to zeros 
-                    init_state=np.zeros((rnn.num_layers, 2, test_batch_size, rnn.hidden_units))
-
-                    #Train
-                    loss = rnn.sess.run([rnn.loss], feed_dict={rnn.X: inputData, 
-                                                           rnn.true_next_state: labelData,
-                                                           rnn.init_state: init_state})
-                    totLoss += loss[0]
-                    avg +=1
-
-                summ = rnn.sess.run(rnn.testing, feed_dict={rnn.totLossPlace: (totLoss/avg)})
-                rnn.file.add_summary(summ, ep)
-
-    #Used to retrieve a sequence of 10 timesteps and action plus the target state embedding
+    #Used to retrieve a sequence of frames and actions plus the next frames and the rewards
     def prepareRNNData(self, batch_size, timesteps, features, dataset):
         inputData=np.zeros((batch_size, timesteps, features + FLAGS.actions_size))#+1 is action
         labelData=np.zeros((batch_size, timesteps, features +1))#+1 is reward
@@ -169,15 +172,18 @@ class Trainer():
 
         for i,end in enumerate(s_idxs):
             start=end-timesteps
+            all_frames=dataset['embeds'][start:end+1]
+
             #retrieve the timesteps-1 previous states and actions
-            seqStates=dataset['embeds'][start:end]
+            seqStates=all_frames[:-1]
             seqActions=np.expand_dims(dataset['actions'][start:end], axis=-1)
             inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
 
             #retrieve the rewards and the states shifted by 1 in the future
-            seqStates=dataset['embeds'][start+1:end+1]
+            seqStates=all_frames[1:]
             seqRews=np.expand_dims(dataset['rews'][start:end], axis=-1)
             labelData[i]=np.concatenate((seqStates, seqRews), axis=-1)
+
         return inputData, labelData
 
 
