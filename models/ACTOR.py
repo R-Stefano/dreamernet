@@ -71,8 +71,13 @@ class ACTOR():
                 tf.summary.scalar('policy_loss', tf.reduce_mean(self.policyLoss)),
                 tf.summary.scalar('value_loss',  tf.reduce_mean(self.valueLoss)),
                 tf.summary.scalar('tot_loss', self.totLoss),
+            ])
+
+        with tf.name_scope('game'):
+            self.game=tf.summary.merge([
                 tf.summary.scalar('avg_reward', self.avgRew)
             ])
+        
 
     def save(self):
         self.saver.save(self.sess, self.model_folder+"graph.ckpt")

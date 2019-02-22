@@ -25,6 +25,8 @@ class VAEGAN():
         self.img_size=FLAGS.img_size
         self.latent_dim=FLAGS.latent_dimension
         self.beta=FLAGS.beta
+        self.test_size=FLAGS.VAEGAN_test_size
+
         self.gen_X=tf.placeholder(tf.float32, shape=[None, self.img_size, self.img_size, 3])
         self.disc_Y=tf.placeholder(tf.float32, shape=[None])
 
@@ -36,7 +38,7 @@ class VAEGAN():
         #Save/restore only the weights variables
         self.saver=tf.train.Saver()
 
-        if not(FLAGS.training_VAE or FLAGS.training_GAN):
+        if not(FLAGS.training_VAE or FLAGS.training_VAEGAN):
             self.saver.restore(self.sess, self.model_folder+"graph.ckpt")
             print('VAE weights have been restored')
         else:
@@ -203,8 +205,8 @@ class VAEGAN():
             states=np.expand_dims(states, axis=0)
 
         embeds=np.zeros((states.shape[0], self.latent_dim))
-        for batchStart in range(0, states.shape[0], FLAGS.VAE_test_size):
-            batchEnd=batchStart+FLAGS.VAE_test_size
+        for batchStart in range(0, states.shape[0], self.test_size):
+            batchEnd=batchStart+self.test_size
 
             out=self.sess.run(self.latent, feed_dict={self.gen_X: states[batchStart:batchEnd]})
             embeds[batchStart:batchEnd]=out

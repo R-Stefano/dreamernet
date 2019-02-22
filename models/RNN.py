@@ -10,6 +10,8 @@ class RNN():
         self.model_folder='models/RNN/'
 
         #HYPERPARAMETERS
+        self.train_size=FLAGS.RNN_train_size
+
         self.sequence_length=FLAGS.sequence_length
         self.latent_dimension=FLAGS.latent_dimension
         self.hidden_units=FLAGS.hidden_units
@@ -50,7 +52,7 @@ class RNN():
 
             #Feed an input of shape [batch_size, 10, state_rep_length]
             #self.output is a tensor of shape [batch_size, 100, hidden_units]
-            #hidden_cell_statesTuple is a list of 2 elements: self.cell_state, self.hidden_state where self.output[:, -1, :]=self.cell_state
+            #hidden_cell_statesTuple is a list of 2 elements: self.hidden_state, self.cell_state where self.output[:, -1, :]=self.cell_state
             self.output, self.hidden_cell_statesTuple=tf.nn.dynamic_rnn(cell=self.lstm_cell, inputs=self.X, initial_state=init_state)
 
         flat=tf.reshape(self.output, (-1, self.hidden_units), name="flat_LSTM_output")
@@ -73,11 +75,6 @@ class RNN():
             true_next_state, true_reward=tf.split(true_next, [self.latent_dimension,1], 1)
 
         with tf.variable_scope('representation_loss'):
-            '''
-            self.term1=true_next_state*tf.log(self.next_state_out + 1e-9)
-            self.term2= (1-true_next_state)*tf.log(1-self.next_state_out + 1e-9)
-            summ=tf.reduce_sum(self.term1 + self.term2, axis=-1)
-            '''
             self.representation_loss=tf.reduce_mean(tf.reduce_sum(tf.square(true_next_state - self.next_state_out),axis=-1))
         with tf.variable_scope('reward_loss'):        
             self.reward_loss=tf.reduce_mean(tf.square(true_reward -self.reward_out))
@@ -126,7 +123,10 @@ class RNN():
             #initialize hidden state and cell state to zeros 
             initialize=np.zeros((self.num_layers, 2, input.shape[0], self.hidden_units))
 
-        nextStates, rew, hidden_state=self.sess.run([self.next_state_out, self.reward_out,self.hidden_cell_statesTuple], feed_dict={self.X: input,
-                                                             self.init_state: initialize})
+        nextStates, rew, h_c_states=self.sess.run([self.next_state_out, 
+                                                    self.reward_out,
+                                                    self.hidden_cell_statesTuple], 
+                                                    feed_dict={self.X: input,
+                                                                self.init_state: initialize})
 
-        return np.concatenate((nextStates,rew),axis=-1), hidden_state[0]
+        return np.concatenate((nextStates,rew),axis=-1), np.expand_dims(np.asarray(h_c_states[0]), axis=0)

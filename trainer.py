@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from utils import preprocessingState
+import utils
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -8,13 +8,13 @@ FLAGS = flags.FLAGS
 class Trainer():
     def prepareVAEGAN(self,frames, vae):
         VAE_epoches=FLAGS.VAE_training_epoches +1
-        GAN_epoches=FLAGS.GAN_epoches +1
-        GAN_disc_train_real_epoches=FLAGS.GAN_disc_real_epoches +1
-        GAN_disc_train_fake_epoches=FLAGS.GAN_disc_fake_epoches +1
-        GAN_gen_train_epoches=FLAGS.GAN_gen_epoches +1
+        GAN_epoches=FLAGS.VAEGAN_epoches +1
+        GAN_disc_train_real_epoches=FLAGS.VAEGAN_disc_real_epoches +1
+        GAN_disc_train_fake_epoches=FLAGS.VAEGAN_disc_fake_epoches +1
+        GAN_gen_train_epoches=FLAGS.VAEGAN_gen_epoches +1
 
-        train_batch_size=FLAGS.VAE_train_size
-        test_batch_size=FLAGS.VAE_test_size
+        train_batch_size=FLAGS.VAEGAN_train_size
+        test_batch_size=FLAGS.VAEGAN_test_size
 
         np.random.shuffle(frames)
 
@@ -46,7 +46,7 @@ class Trainer():
 
                     vae.save()
 
-        if(FLAGS.training_GAN):
+        if(FLAGS.training_VAEGAN):
             for ep in range(GAN_epoches):
                 print('Training GAN, epoch ({}/{})'.format(ep,GAN_epoches))
                 #First train the discriminator on real images
@@ -124,7 +124,7 @@ class Trainer():
 
         for ep in range(training_epoches):
             print('Training RNN, epoch ({}/{})'.format(ep,training_epoches))
-            inputData, labelData = self.prepareRNNData(train_batch_size, rnn.sequence_length, rnn.latent_dimension, train_dataset)
+            inputData, labelData = utils.prepareRNNData(train_batch_size, rnn.sequence_length, rnn.latent_dimension, train_dataset['embeds'], train_dataset['actions'], train_dataset['rews'], vaegan)
             
             #initialize hidden state and cell state to zeros 
             init_state=np.zeros((rnn.num_layers, 2, train_batch_size, rnn.hidden_units))
@@ -136,7 +136,7 @@ class Trainer():
             rnn.file.add_summary(summ, ep)
             #Saving and testing
             if ep % 50 ==0:
-                inputData, labelData = self.prepareRNNData(test_batch_size, rnn.sequence_length, rnn.latent_dimension, test_dataset)
+                inputData, labelData = utils.prepareRNNData(test_batch_size, rnn.sequence_length, rnn.latent_dimension, test_dataset['embeds'], test_dataset['actions'], test_dataset['rews'], vaegan)
 
                 #initialize hidden state and cell state to zeros 
                 init_state=np.zeros((rnn.num_layers, 2, test_batch_size, rnn.hidden_units))
@@ -147,12 +147,19 @@ class Trainer():
                                                             rnn.init_state: init_state})
                 rnn.file.add_summary(summ, ep)
 
-                #retrieve 3 random frames from a random batch and their correspective network predictions
-                expl=np.random.choice(test_batch_size)
+                #DISPLAY NETWORK PROGESSION IN TENSORFLOW
+                #take randomly 3 sequences from testing data in order to get the s' prediction
                 idxs=np.random.choice(test_batch_size, 3)
-                frame_s=inputData[expl][idxs][:,:-1]
-                frames_s1=np.reshape(out, (test_batch_size, rnn.sequence_length, -1))[expl][idxs+1]
-                frames=vaegan.decode(np.concatenate((frame_s, frames_s1), axis=0))
+                predictingExamples=inputData[idxs]
+                out, h=rnn.predict(predictingExamples)
+                out=out.reshape(3, rnn.sequence_length, -1)
+
+                #retrieve the last predicted state as well as the last inputdata state
+                s1preds=out[:,-1,:-1]
+                sinput=predictingExamples[:,-1,:-1]
+                
+                #make the vaegan decode them
+                frames=vaegan.decode(np.concatenate((sinput, s1preds), axis=0))
 
                 #display in tensorboard
                 summ= rnn.sess.run(rnn.predicting, feed_dict={rnn.frame_s: frames[:3], 
@@ -162,32 +169,70 @@ class Trainer():
                 print('Saving RNN..')
                 rnn.save()
 
-    #Used to retrieve a sequence of frames and actions plus the next frames and the rewards
-    def prepareRNNData(self, batch_size, timesteps, features, dataset):
-        inputData=np.zeros((batch_size, timesteps, features + FLAGS.actions_size))#+1 is action
-        labelData=np.zeros((batch_size, timesteps, features +1))#+1 is reward
+    def trainSystem(self, statesBuffer, 
+                    actionsBuffer, 
+                    rewardsBuffer, 
+                    terminalBuffer, 
+                    hidden_states, 
+                    vaegan, 
+                    rnn,
+                    actor,
+                    step):
+        '''
+        #1. TRAIN VAE using frames
+        idxs=np.random.randint(0, len(statesBuffer), 32)
+        states=np.asarray(statesBuffer)[idxs]
+        
+        _, summ=vae.sess.run([vae.opt, vae.playing], feed_dict={vae.X: states})
+        vae.file.add_summary(summ, i)
+        vae.save()
+        ''' 
+        #2. TRAIN RNN using states, action, next state, reward
+        inputData, labelData=utils.prepareRNNData(rnn.train_size, 
+                                                  rnn.sequence_length, 
+                                                  rnn.latent_dimension, 
+                                                  statesBuffer,
+                                                  actionsBuffer, 
+                                                  rewardsBuffer,
+                                                  vaegan)
+           
+        initState=np.zeros((rnn.num_layers, 2, rnn.train_size, rnn.hidden_units))
+        
+        _, summ=rnn.sess.run([rnn.opt, rnn.playing], feed_dict={rnn.X: inputData,
+                                                                rnn.true_next_state: labelData,
+                                                                rnn.init_state: initState})
+        rnn.file.add_summary(summ, step)
+        rnn.save()
 
-        #random select 32 states (-1 to avoid to predict the frame after the last frame)
-        s_idxs=np.random.randint(timesteps, (dataset['embeds'].shape[0]-1), 32)
+        #3. TRAIN ACTOR with s,h and real reward
+        idxs=np.random.randint(0, statesBuffer.shape[0]-1, 32)
 
-        for i,end in enumerate(s_idxs):
-            start=end-timesteps
-            all_frames=dataset['embeds'][start:end+1]
+        #First, feed states for vs1
+        states=vaegan.encode(statesBuffer[idxs])
+        h_state=hidden_states[idxs][:,0,0,0]
 
-            #retrieve the timesteps-1 previous states and actions
-            seqStates=all_frames[:-1]
-            seqActions=np.expand_dims(dataset['actions'][start:end], axis=-1)
-            inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
+        _, vs1=actor.predict(np.concatenate((states, h_state), axis=-1))
 
-            #retrieve the rewards and the states shifted by 1 in the future
-            seqStates=all_frames[1:]
-            seqRews=np.expand_dims(dataset['rews'][start:end], axis=-1)
-            labelData[i]=np.concatenate((seqStates, seqRews), axis=-1)
+        #train the network
+        idxs=idxs-1
+        states=vaegan.encode(statesBuffer[idxs])
+        h_state=hidden_states[idxs][:,0,0,0]
 
-        return inputData, labelData
+        #retrieve actions
+        input_actions=actionsBuffer[idxs]
+        input_rewards=rewardsBuffer[idxs]
+        input_terminal=terminalBuffer[idxs]
 
-    def trainSystem(self):
-        print('numpy') 
+        dict_input= {actor.X: np.concatenate((states, h_state), axis=-1),
+                     actor.actions: input_actions,
+                     actor.Vs1: vs1,
+                     actor.rewards: input_rewards,
+                     actor.isTerminal: input_terminal}
+
+        _, summ=actor.sess.run([actor.opt, actor.training], feed_dict=dict_input)
+        actor.file.add_summary(summ, step)
+        actor.save()
+
 
 '''
     #Called to train alphazero using everything.

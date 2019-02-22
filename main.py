@@ -1,82 +1,98 @@
-import tensorflow as tf
+import tensorflow as tf 
+import numpy as np
+import matplotlib.pyplot as plt 
+import shutil #clean folder for retraining
+from utils import preprocessingState
+from models import RNN, VAEGAN, ACTOR
+from trainer import Trainer
+from EnvWrapper import EnvWrap
+
+import preprocessing
+import training
+test_envs={
+    'frost':['FrostbiteNoFrameskip-v0', 18],
+    'pong':['PongNoFrameskip-v0', 6]
+}
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-#Environment
-flags.DEFINE_integer('num_actions', 3, 'Number of possible actions in the environment')
+#ENVIRONMENT #env basic is 210,160,3
+flags.DEFINE_integer('img_size', 96, 'dimension of the state to feed into the VAE')
+flags.DEFINE_integer('crop_size', 160, 'dimension of the state after crop')
+flags.DEFINE_integer('actions_size', 1, 'Number of actions in the environment. box2d is 3, ataray games is 1')
+flags.DEFINE_integer('num_actions', 18, 'Number of possible actions in the environment if action is discreate')
+flags.DEFINE_integer('gap', 28, 'How much crop from the top of the image')
 flags.DEFINE_integer('init_frame_skip', 30, 'Number of frames to skip at the beginning of each game')
 flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
-flags.DEFINE_string('env', 'PongNoFrameskip-v4', 'The environment to use')
-flags.DEFINE_integer('simulation_epochs', 10, 'Number of games to play to generate the data to train VAE or RNN')
+flags.DEFINE_string('env', 'FrostbiteNoFrameskip-v0', 'The environment to use') # AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0  #CrazyClimber #JourneyEscape #Tutankham
+flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 
-#Hyperparameters
-flags.DEFINE_float('learning_rate', 0.01, 'Initial learning rate.')
-flags.DEFINE_integer('latent_dimension', 32, 'Dimension of the embedded representation')
-flags.DEFINE_boolean('image_preprocessing', True, 'If False, the image is fed into the VAE as it is')
+#PREPROCESSING
+flags.DEFINE_boolean('preprocessing', False, 'If True, train the VAEGAN and the RNN before the agent')
+flags.DEFINE_boolean('training_VAE', True, 'If True, start by training the VAE')
+flags.DEFINE_boolean('training_VAEGAN', True, 'If True, train the VAEGAN model')
+flags.DEFINE_boolean('testing_VAEGAN', False, 'If true testing the VAEGAN')
 
-#NOTE: CHECK WELL IN THE ENVIRONMENT CLASS. THE FINAL STATE IS ADDED AS A 64,64 MATRIX ALWAYS
-
-#VAE 
-flags.DEFINE_boolean('training_VAE', True, 'If True, train the VAE model')
-flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train VAE')
-flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
-flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')
-
-#RNN
 flags.DEFINE_boolean('training_RNN', True, 'If True, train the RNN model')
-flags.DEFINE_integer('sequence_length', 10, 'Total number of states to feed to the RNN')
-flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
-flags.DEFINE_integer('RNN_training_epoches', 2000, 'Number of epoches to train VAE')
+flags.DEFINE_boolean('testing_RNN', False, 'If true testing the RNN')
+
+flags.DEFINE_integer('games', 5 , 'Number of times run the environment to create the data for preprocessing')
+#VAEGAN HYPERPARAMS
+flags.DEFINE_integer('VAEGAN_epoches', 1000, 'Number of times to repeat real-fake training')
+flags.DEFINE_integer('VAEGAN_disc_real_epoches', 75, 'Number of epoches to train the discriminator on real data')
+flags.DEFINE_integer('VAEGAN_disc_fake_epoches', 75, 'number of epoches to train the discriminator on fake data')
+flags.DEFINE_integer('VAEGAN_gen_epoches', 50, 'number of epoches to train the discriminator on fake data')
+flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train VAE')
+flags.DEFINE_integer('VAEGAN_train_size', 32, 'Number of frames to feed at each epoch')
+flags.DEFINE_integer('VAEGAN_test_size', 64, 'Number of frames to feed at each epoch')
+
+flags.DEFINE_boolean('use_only_GAN_loss', False, 'If true the error for the generator is only the abiity to fool the discriminator, else it is also added the VAE error')
+flags.DEFINE_float('weight_VAE_loss', 0.5, 'If use_only_GAN_loss is False, this value decide the weight ot give to the VAE loss on the generator')
+flags.DEFINE_integer('latent_dimension', 64, 'latent dimension')
+flags.DEFINE_float('beta', 1, 'Disentangled Hyperparameter')
+
+#RNN HYPERPARAMETERS
+flags.DEFINE_integer('RNN_training_epoches', 3000, 'Number of epoches to train VAE')
 flags.DEFINE_integer('RNN_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('RNN_test_size', 64, 'Number of frames to feed at each epoch')
-#MCTS
-flags.DEFINE_integer('rollouts', 100, 'Number of simulations before selecting the action')
+flags.DEFINE_integer('sequence_length', 100, 'Total number of states to feed to the RNN')
+flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
+flags.DEFINE_integer('LSTM_layers', 1, 'Number of the LSTM layers')
+
 
 #ACTOR
+flags.DEFINE_integer('actor_training_games', 1000, 'Number of games to play while training the actor')
+flags.DEFINE_integer('transition_buffer_size', 10000, 'Number of transitions to store')
+#flags.DEFINE_integer('actor_training_steps', 200, 'Number of training steps after the training games')
+#flags.DEFINE_integer('actor_training_epochs', 100, 'Number of times repeate games + steps')
+#flags.DEFINE_integer('actor_testing_games', 10, 'Number of games to play after each training')
+
 flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
-flags.DEFINE_integer('actor_training_games', 10, 'Number of games to play to generate the transitions to train the Actor')
-flags.DEFINE_integer('actor_training_steps', 200, 'Number of training steps after the training games')
-flags.DEFINE_integer('actor_training_epochs', 100, 'Number of times repeate games + steps')
-flags.DEFINE_integer('actor_testing_games', 10, 'Number of games to play after each training')
+flags.DEFINE_integer('ACTOR_input_size', 192, 'THe dimension of input vector')
 
-from models import VAE, RNN, ACTOR, MCTS
-from EnvWrapper import EnvWrap
-from trainer import Trainer
-from utils import *
-import matplotlib.pyplot as plt
+vae_sess=tf.Session()
+rnn_sess=tf.Session()
+actor_sess=tf.Session()
 
+env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env, FLAGS.renderGame)
+vaegan=VAEGAN.VAEGAN(vae_sess)
+rnn=RNN.RNN(rnn_sess)
+actor=ACTOR.ACTOR(actor_sess)
+trainer=Trainer()
 
+#If called, train the VAEGAN AND RNN before the actor
+if (FLAGS.preprocessing):
+    preprocessing.run(env, vaegan, trainer, rnn)
+
+#Make the actor play and train VAEGAN, RNN and actor
+training.run(env, vaegan, rnn, actor, trainer)
+
+'''
 def main():
-    sess=tf.Session()
-
-    #Instantiate the models
-    vae = VAE.VAE(sess)
-    rnn=RNN.RNN(sess)
-    actor=ACTOR.ACTOR(sess)
-    mcts=MCTS.Tree(rnn, actor)
-
-    #instantiate environment
-    env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env, FLAGS.image_preprocessing)
-
-    #instantiate trainer
-    trainer=Trainer()
-
-    if (FLAGS.training_VAE or FLAGS.training_RNN):
-        #Generate samples to train VAE and RNN
-        frames, actions=env.run(FLAGS.simulation_epochs)
-
-    if(FLAGS.training_VAE):
-        trainer.trainVAE(frames, vae)
-
-    if(FLAGS.training_RNN):
-        #the states must be processed by VAE
-        embeddings=vae.encode(frames)
-        trainer.trainRNN(embeddings, actions, rnn)
     
     #Tran alphazero using MCTS
     trainer.trainActor(mcts, vae, rnn, env, actor)
     
-    '''
     ONce the VAE and RNN have been trained, I have to use the alphazero.
     Alphazero takes the current state and asks the MCTS to create the next states.
     No okay, so the next thhing is to give the current state to the MCTS that starts
@@ -107,6 +123,3 @@ def visualizeEmbeddings(sess,env,frames, vae):
     e = sess.run(vae.latent, feed_dict={vae.X : frames/255.})
 
     visualizeEmbeddings(e, frames, "models/VAE/")
-
-
-main()
