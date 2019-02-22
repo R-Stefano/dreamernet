@@ -4,27 +4,38 @@ import matplotlib.pyplot as plt
 import shutil #clean folder for retraining
 from utils import preprocessingState
 
-from models import RNN, VAE, ACTOR
+from models import RNN, VAEGAN, ACTOR
 from trainer import Trainer
 from EnvWrapper import EnvWrap
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-#ENVIRONMENT
+#ENVIRONMENT #env basic is 210,160,3
 flags.DEFINE_integer('img_size', 96, 'dimension of the state to feed into the VAE')
 flags.DEFINE_integer('crop_size', 160, 'dimension of the state after crop')
 flags.DEFINE_integer('actions_size', 1, 'Number of actions in the environment. box2d is 3, ataray games is 1')
-flags.DEFINE_integer('num_actions', 6, 'Number of possible actions in the environment if action is discreate')
-flags.DEFINE_integer('gap', 35, 'How much crop from the top of the image')
+flags.DEFINE_integer('num_actions', 18, 'Number of possible actions in the environment if action is discreate')
+flags.DEFINE_integer('gap', 28, 'How much crop from the top of the image')
 flags.DEFINE_integer('init_frame_skip', 30, 'Number of frames to skip at the beginning of each game')
 flags.DEFINE_integer('frame_skip', 4, 'Number of times an action is repeated')
-flags.DEFINE_string('env', 'PongNoFrameskip-v0', 'The environment to use') #AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0
-flags.DEFINE_integer('games', 3 , 'Number of times run the environment to create the data')
+flags.DEFINE_string('env', 'FrostbiteNoFrameskip-v0', 'The environment to use') # AirRaidNoFrameskip-v0 # #BreakoutNoFrameskip-v0  #CrazyClimber #JourneyEscape #Tutankham
+flags.DEFINE_integer('games', 5 , 'Number of times run the environment to create the data')
+flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 
-#VAE
+#GAN
 flags.DEFINE_boolean('training_VAE', False, 'If True, train the VAE model')
-flags.DEFINE_boolean('testing_VAE', False, 'If true testing the VAE')
+flags.DEFINE_boolean('training_GAN', False, 'If True, train the GAN model')
+flags.DEFINE_boolean('testing_VAEGAN', False, 'If true testing the VAEGAN')
+flags.DEFINE_boolean('use_only_GAN_loss', False, 'If true the error for the generator is only the abiity to fool the discriminator, else it is also added the VAE error')
+flags.DEFINE_float('weight_VAE_loss', 0.5, 'If use_only_GAN_loss is False, this value decide the weight ot give to the VAE loss on the generator')
+
+
+flags.DEFINE_integer('GAN_epoches', 10000, 'Nmber of times to repeat real-fake training')
+flags.DEFINE_integer('GAN_disc_real_epoches', 50, 'Number of epoches to train the discriminator on real data')
+flags.DEFINE_integer('GAN_disc_fake_epoches', 50, 'number of epoches to train the discriminator on fake data')
+flags.DEFINE_integer('GAN_gen_epoches', 50, 'number of epoches to train the discriminator on fake data')
 flags.DEFINE_integer('VAE_training_epoches', 2000, 'Number of epoches to train VAE')
+
 flags.DEFINE_integer('VAE_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('VAE_test_size', 64, 'Number of frames to feed at each epoch')
 #VAE HYPERPARAMETERS
@@ -41,7 +52,6 @@ flags.DEFINE_integer('RNN_test_size', 64, 'Number of frames to feed at each epoc
 flags.DEFINE_integer('sequence_length', 100, 'Total number of states to feed to the RNN')
 flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
 flags.DEFINE_integer('LSTM_layers', 1, 'Number of the LSTM layers')
-
 #ACTOR
 flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
 flags.DEFINE_integer('ACTOR_input_size', 192, 'THe dimension of input vector')
@@ -55,8 +65,8 @@ vae_sess=tf.Session()
 rnn_sess=tf.Session()
 actor_sess=tf.Session()
 
-env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env)
-vae=VAE.VAE(vae_sess)
+env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env, FLAGS.renderGame)
+vae=VAEGAN.VAEGAN(vae_sess)
 rnn=RNN.RNN(rnn_sess)
 actor=ACTOR.ACTOR(actor_sess)
 trainer=Trainer()
@@ -74,20 +84,21 @@ for i in range(FLAGS.actor_training_games):
         # quick state preprocessing
         s=preprocessingState(s)
 
+        #Save data for system training
         statesBuffer.append(s)
         hidden_state.append(h)
 
         #encode the state
         enc=vae.encode(s) #[1,64]
         
-        evaluateInput=np.concatenate((enc, h[0,1]), axis=-1) #[1,192]
-        policy, value=actor.predict(evaluateInput)
+        inputActor=np.concatenate((enc, h[0,1]), axis=-1) #[1,192]
+        policy, value=actor.predict(inputActor)
 
         a=np.argmax(policy)
 
         #predict next state but retrieve the encoded version #[1,128]
-        exp_a=np.expand_dims(np.expand_dims(a, axis=0), axis=0)
-        out,h=rnn.predict(np.expand_dims(np.concatenate((enc, exp_a), axis=-1), axis=1), initialize=h)
+        inputRNN=np.expand_dims(np.concatenate((enc, np.asarray(a).reshape((1,1))), axis=-1), axis=1)
+        _,h=rnn.predict(inputRNN, initialize=h)
 
         h=np.expand_dims(np.asarray(h), axis=0)
         actionsBuffer.append(a)
@@ -104,69 +115,65 @@ for i in range(FLAGS.actor_training_games):
             hidden_state.append(h)
 
     if len(statesBuffer)>FLAGS.sequence_length:
-        
-        #train vae using states
+        '''
+        #TRAIN VAE using frames
         idxs=np.random.randint(0, len(statesBuffer), 32)
         states=np.asarray(statesBuffer)[idxs]
         
         _, summ=vae.sess.run([vae.opt, vae.playing], feed_dict={vae.X: states})
         vae.file.add_summary(summ, i)
         vae.save()
+        ''' 
 
-        #train rnn using states, action, next state, reward
-        inputData=np.zeros((FLAGS.RNN_train_size, FLAGS.sequence_length, FLAGS.latent_dimension+FLAGS.actions_size))
-        labelData=np.zeros((FLAGS.RNN_train_size, FLAGS.sequence_length, FLAGS.latent_dimension+1))
-        initStateData=np.zeros((1, 2, FLAGS.RNN_train_size, FLAGS.hidden_units))
-        
+        #TRAIN RNN using states, action, next state, reward       
         idxs=np.random.randint(FLAGS.sequence_length, len(statesBuffer)-1, 32)
-        for j,idx in enumerate(idxs):
-            start=idx-FLAGS.sequence_length
-            #encode 101 states. Use first 100 for input and last 100 for output
-            statesToEncode=np.asarray(statesBuffer[start:idx+1])
-            encodedStates=vae.encode(statesToEncode)
+        #PREPARE INIT STATE
+        initState=np.transpose(np.asarray(hidden_state)[idxs], (3,1,2,0,4))[0]
 
-            #retrieve the first 100 states and actions
-            seqActions=np.expand_dims(np.asarray(actionsBuffer[start:idx]), axis=-1)
-            #create Input data           
-            inputData[j]=np.concatenate((encodedStates[:FLAGS.sequence_length], seqActions), axis=-1)
+        #PREPARE INPUT
+        #encode states.
+        encodedStates=vae.encode(np.asarray(statesBuffer)[idxs])
 
-            seqRewards=np.expand_dims(np.asarray(rewardsBuffer[start:idx]), axis=-1)
-            labelData[j]=np.concatenate((encodedStates[1:], seqRewards), axis=-1)
+        #retrieve the actions
+        seqActions=np.asarray(actionsBuffer)[idxs].reshape((-1,1))
+        inputData=np.concatenate((encodedStates, seqActions), axis=-1).reshape((FLAGS.RNN_train_size, 1, -1))
 
-            initStateData[0,:,j,:]=np.asarray(hidden_state)[0,:,0]
-        
+        #PREPARE OUTPUT
+        encodedStates=vae.encode(np.asarray(statesBuffer)[idxs+1])
+        seqRewards=np.asarray(rewardsBuffer)[idxs].reshape((-1,1))
+        labelData=np.concatenate((encodedStates, seqRewards), axis=-1).reshape((FLAGS.RNN_train_size, 1, -1))
+
         _, summ=rnn.sess.run([rnn.opt, rnn.playing], feed_dict={rnn.X: inputData,
                                                                 rnn.true_next_state: labelData,
-                                                                rnn.init_state: initStateData})
+                                                                rnn.init_state: initState})
         rnn.file.add_summary(summ, i)
         rnn.save()
         
-        #train actor with s,h and real reward
-        #feed first states for vs1
+        #TRAIN ACTOR with s,h and real reward
         idxs=np.random.randint(0, len(statesBuffer)-1, 32)
+        #First, feed states for vs1
         states=vae.encode(np.asarray(statesBuffer)[idxs])
-        h=np.asarray(hidden_state)[idxs]
-        h_state=np.squeeze(h[:,:,-1,:])
+        h_state=np.squeeze(np.asarray(hidden_state)[idxs][:,:,-1,:])
+
         vs1=actor.sess.run(actor.valueOutput, feed_dict={actor.X:np.concatenate((states, h_state), axis=-1)})
         
         #train the network
         idxs=idxs-1
         states=vae.encode(np.asarray(statesBuffer)[idxs])
-        h=np.asarray(hidden_state)[idxs]
-        h_state=np.squeeze(h[:,:,-1,:])
+        h_state=np.squeeze(np.asarray(hidden_state)[idxs][:,:,-1,:])
 
         #retrieve actions
-        input_actions=np.expand_dims(np.asarray(actionsBuffer)[idxs], axis=-1)
-        input_rewards=np.expand_dims(np.asarray(rewardsBuffer)[idxs], axis=-1)
-        input_terminal=np.expand_dims(np.asarray(terminalBuffer)[idxs], axis=-1)
+        input_actions=np.asarray(actionsBuffer)[idxs]
+        input_rewards=np.asarray(rewardsBuffer)[idxs]
+        input_terminal=np.asarray(terminalBuffer)[idxs]
 
-        print(input_terminal.shape)
+        dict_input= {actor.X: np.concatenate((states, h_state), axis=-1),
+                     actor.actions: input_actions,
+                     actor.Vs1: np.squeeze(vs1),
+                     actor.rewards: input_rewards,
+                     actor.isTerminal: input_terminal,
+                     actor.avgRew: game_rew}
 
-        _, summ=actor.sess.run([actor.opt, actor.training], feed_dict={actor.X: np.concatenate((states, h_state), axis=-1),
-                                               actor.actions: input_actions,
-                                               actor.Vs1: vs1,
-                                               actor.rewards: input_rewards,
-                                               actor.isTerminal: input_terminal,
-                                               actor.avgRew: game_rew})
+        _, summ=actor.sess.run([actor.opt, actor.training], feed_dict=dict_input)
         actor.file.add_summary(summ, i)
         actor.save()

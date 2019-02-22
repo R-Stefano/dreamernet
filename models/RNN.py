@@ -110,6 +110,13 @@ class RNN():
                 tf.summary.image('frame_s', self.frame_s),
                 tf.summary.image('frame_s1', self.frame_s1)
             ])
+        
+        with tf.name_scope('RNN_playing'):
+            self.playing=tf.summary.merge([
+                tf.summary.scalar('state_loss', self.representation_loss),
+                tf.summary.scalar('rew_loss', self.reward_loss),
+                tf.summary.scalar('tot_loss', self.loss)
+            ])
     
     def save(self):
         self.saver.save(self.sess, self.model_folder+"graph.ckpt")

@@ -186,7 +186,10 @@ class Trainer():
 
         return inputData, labelData
 
+    def trainSystem(self):
+        print('numpy') 
 
+'''
     #Called to train alphazero using everything.
     def trainActor(self,mcts, vae, rnn, env, actor):
         training_games=FLAGS.actor_training_games
@@ -261,3 +264,4 @@ class Trainer():
                 isTerminal.append(d)
                 s=s1
         return states, actions, rewards, isTerminal
+'''

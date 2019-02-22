@@ -40,21 +40,23 @@ class ACTOR():
         self.valueOutput=nn.fully_connected(x, 1, activation_fn=None)
     
     def buildLoss(self):
-        self.actions=tf.placeholder(tf.int32, shape=[None, 1])
-        self.Vs1=tf.placeholder(tf.float32, shape=[None, 1])
-        self.rewards=tf.placeholder(tf.float32, shape=[None, 1])
-        self.isTerminal=tf.placeholder(tf.float32, shape=[None, 1])
+        self.actions=tf.placeholder(tf.int32, shape=[None])
+        self.Vs1=tf.placeholder(tf.float32, shape=[None])
+        self.rewards=tf.placeholder(tf.float32, shape=[None])
+        self.isTerminal=tf.placeholder(tf.float32, shape=[None])
 
         #Convert actions to hot encode
-        self.a_hot_encoded=tf.one_hot(self.actions, FLAGS.num_actions)
-        
-        with tf.variable_scope('policy_loss'):
-            self.policyLoss=tf.reduce_mean(-tf.reduce_sum(self.a_hot_encoded * tf.log(self.policyOutput + 1e-9) + (1-self.a_hot_encoded)*tf.log(1-self.policyOutput + 1e-9),axis=-1))
+        self.a_hot_encoded=tf.one_hot(self.actions, self.num_actions)
+
+        self.advantage=tf.reshape(self.valueOutput, [-1]) - (1-self.isTerminal)*(self.rewards + 0.99 * self.Vs1)
         
         with tf.variable_scope('value_loss'):
-            self.valueLoss=tf.reduce_mean(tf.square(self.valueOutput - (1-self.isTerminal)*(self.rewards + 0.99 * self.Vs1)))
+            self.valueLoss=tf.square(self.advantage)
 
-        self.totLoss = self.valueLoss + self.policyLoss
+        with tf.variable_scope('policy_loss'):
+            self.policyLoss=-tf.reduce_sum(self.a_hot_encoded * tf.log(self.policyOutput + 1e-9) + (1-self.a_hot_encoded)*tf.log(1-self.policyOutput + 1e-9),axis=-1) * self.advantage
+        
+        self.totLoss = tf.reduce_mean(self.valueLoss + self.policyLoss)
 
         self.opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.totLoss)
         
@@ -64,12 +66,13 @@ class ACTOR():
         self.file=tf.summary.FileWriter(self.model_folder, self.sess.graph)
         self.avgRew=tf.placeholder(tf.float32)
         
-        self.training=tf.summary.merge([
-            tf.summary.scalar('Actor_policy_loss', self.policyLoss),
-            tf.summary.scalar('Actor_value_loss', self.valueLoss),
-            tf.summary.scalar('Actor_tot_loss', self.totLoss),
-            tf.summary.scalar('Actor_avg_reward', self.avgRew)
-        ])
+        with tf.name_scope('actor_training'):
+            self.training=tf.summary.merge([
+                tf.summary.scalar('policy_loss', tf.reduce_mean(self.policyLoss)),
+                tf.summary.scalar('value_loss',  tf.reduce_mean(self.valueLoss)),
+                tf.summary.scalar('tot_loss', self.totLoss),
+                tf.summary.scalar('avg_reward', self.avgRew)
+            ])
 
     def save(self):
         self.saver.save(self.sess, self.model_folder+"graph.ckpt")
