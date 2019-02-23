@@ -6,7 +6,7 @@ from utils import preprocessingState
 from models import RNN, VAEGAN, ACTOR
 from trainer import Trainer
 from EnvWrapper import EnvWrap
-
+import os
 import preprocessing
 import training
 test_envs={
@@ -16,6 +16,10 @@ test_envs={
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
+
+flags.DEFINE_boolean('preprocessing', False, 'If True, train the VAEGAN and the RNN before the agent')
+flags.DEFINE_boolean('playing', True, 'If true, train the actor and the system on the games')
+
 #ENVIRONMENT #env basic is 210,160,3
 flags.DEFINE_integer('img_size', 96, 'dimension of the state to feed into the VAE')
 flags.DEFINE_integer('crop_size', 160, 'dimension of the state after crop')
@@ -28,7 +32,6 @@ flags.DEFINE_string('env', 'FrostbiteNoFrameskip-v0', 'The environment to use') 
 flags.DEFINE_boolean('renderGame', False , 'Set to True to render the game')
 
 #PREPROCESSING
-flags.DEFINE_boolean('preprocessing', False, 'If True, train the VAEGAN and the RNN before the agent')
 flags.DEFINE_boolean('training_VAE', True, 'If True, start by training the VAE')
 flags.DEFINE_boolean('training_VAEGAN', True, 'If True, train the VAEGAN model')
 flags.DEFINE_boolean('testing_VAEGAN', False, 'If true testing the VAEGAN')
@@ -70,6 +73,13 @@ flags.DEFINE_integer('transition_buffer_size', 10000, 'Number of transitions to 
 flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
 flags.DEFINE_integer('ACTOR_input_size', 192, 'THe dimension of input vector')
 
+if(FLAGS.training_VAE and (len(os.listdir('models/VAEGAN/'))!=0) and FLAGS.training_VAEGAN):
+    print('cleaning VAE folder..')
+    shutil.rmtree('models/VAEGAN/')#clean folder
+if(FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0)):
+    print('cleaning RNN folder..')
+    shutil.rmtree('models/RNN/')#clean folder
+
 vae_sess=tf.Session()
 rnn_sess=tf.Session()
 actor_sess=tf.Session()
@@ -84,8 +94,9 @@ trainer=Trainer()
 if (FLAGS.preprocessing):
     preprocessing.run(env, vaegan, trainer, rnn)
 
-#Make the actor play and train VAEGAN, RNN and actor
-training.run(env, vaegan, rnn, actor, trainer)
+if (FLAGS.playing):
+    #Make the actor play and train VAEGAN, RNN and actor
+    training.run(env, vaegan, rnn, actor, trainer)
 
 '''
 def main():
