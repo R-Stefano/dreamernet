@@ -55,11 +55,11 @@ flags.DEFINE_integer('latent_dimension', 64, 'latent dimension')
 flags.DEFINE_float('beta', 1, 'Disentangled Hyperparameter')
 
 #RNN HYPERPARAMETERS
-flags.DEFINE_integer('RNN_training_epoches', 3000, 'Number of epoches to train VAE')
+flags.DEFINE_integer('RNN_training_epoches', 2000, 'Number of epoches to train VAE')
 flags.DEFINE_integer('RNN_train_size', 32, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('RNN_test_size', 64, 'Number of frames to feed at each epoch')
 flags.DEFINE_integer('sequence_length', 100, 'Total number of states to feed to the RNN')
-flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
+flags.DEFINE_integer('hidden_units', 512, 'Number of hidden units in the LSTM layer')
 flags.DEFINE_integer('LSTM_layers', 1, 'Number of the LSTM layers')
 flags.DEFINE_integer('num_components', 5, 'Number of components of GMM')
 flags.DEFINE_string('prediction_type', 'KL', 'The prediction can be MSE, GMM or KL')
@@ -73,12 +73,12 @@ flags.DEFINE_integer('transition_buffer_size', 10000, 'Number of transitions to 
 #flags.DEFINE_integer('actor_testing_games', 10, 'Number of games to play after each training')
 
 flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
-flags.DEFINE_integer('ACTOR_input_size', 192, 'THe dimension of input vector')
+flags.DEFINE_integer('ACTOR_input_size', 576, 'THe dimension of input vector')
 
-if(FLAGS.training_VAE and (len(os.listdir('models/VAEGAN/'))!=0) and FLAGS.training_VAEGAN):
+if (FLAGS.preprocessing and (FLAGS.training_VAE and (len(os.listdir('models/VAEGAN/'))!=0) and FLAGS.training_VAEGAN)):
     print('cleaning VAE folder..')
     shutil.rmtree('models/VAEGAN/')#clean folder
-if(FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0)):
+if (FLAGS.preprocessing and (FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0))):
     print('cleaning RNN folder..')
     shutil.rmtree('models/RNN/')#clean folder
 

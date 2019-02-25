@@ -144,9 +144,9 @@ class Trainer():
                 init_state=np.zeros((rnn.num_layers, 2, test_batch_size, rnn.hidden_units))
 
                 #Train
-                summ, out = rnn.sess.run([rnn.testing, rnn.next_state_out], feed_dict={rnn.X: inputData, 
-                                                            rnn.true_next_state: labelData,
-                                                            rnn.init_state: init_state})
+                summ= rnn.sess.run(rnn.testing, feed_dict={rnn.X: inputData, 
+                                                           rnn.true_next_state: labelData,
+                                                           rnn.init_state: init_state})
                 rnn.file.add_summary(summ, ep)
 
                 #DISPLAY NETWORK PROGESSION IN TENSORFLOW
@@ -211,6 +211,9 @@ class Trainer():
 
         #First, feed states for vs1
         states=vaegan.encode(statesBuffer[idxs])
+        if (FLAGS.prediction_type == 'KL'):
+            mu, std=np.split(states, [rnn.latent_dimension], axis=-1)
+            states=mu + std*np.random.normal(size=(states.shape[0], rnn.latent_dimension))
         h_state=hidden_states[idxs][:,0,0,0]
 
         _, vs1=actor.predict(np.concatenate((states, h_state), axis=-1))
@@ -218,6 +221,9 @@ class Trainer():
         #train the network
         idxs=idxs-1
         states=vaegan.encode(statesBuffer[idxs])
+        if (FLAGS.prediction_type == 'KL'):
+            mu, std=np.split(states, [rnn.latent_dimension], axis=-1)
+            states=mu + std*np.random.normal(size=(states.shape[0], rnn.latent_dimension))
         h_state=hidden_states[idxs][:,0,0,0]
 
         #retrieve actions

@@ -28,6 +28,9 @@ def run(env, vaegan, rnn, actor, trainer):
 
             #encode the state
             enc=vaegan.encode(s) #[1,64]
+            if (FLAGS.prediction_type == 'KL'):
+                mu, std=np.split(enc, [rnn.latent_dimension], axis=-1)
+                enc=mu + std*np.random.normal(size=rnn.latent_dimension)
             inputActor=np.concatenate((enc, h), axis=-1) #[1,192]
             policy, value=actor.predict(inputActor)
 
