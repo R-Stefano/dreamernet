@@ -144,9 +144,9 @@ class Trainer():
                 init_state=np.zeros((rnn.num_layers, 2, test_batch_size, rnn.hidden_units))
 
                 #Train
-                summ, out = rnn.sess.run([rnn.testing, rnn.next_state_out], feed_dict={rnn.X: inputData, 
-                                                            rnn.true_next_state: labelData,
-                                                            rnn.init_state: init_state})
+                summ= rnn.sess.run(rnn.testing, feed_dict={rnn.X: inputData, 
+                                                           rnn.true_next_state: labelData,
+                                                           rnn.init_state: init_state})
                 rnn.file.add_summary(summ, ep)
 
                 #DISPLAY NETWORK PROGESSION IN TENSORFLOW

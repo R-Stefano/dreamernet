@@ -68,9 +68,9 @@ class RNN():
                 self.stddev=nn.fully_connected(self.flat1, self.latent_dimension, activation_fn=tf.nn.softplus)
                 self.next_state_out=self.mean + self.stddev * tf.random.normal([self.latent_dimension])
             elif (self.prediction=='GMM'):    
-                self.mean=nn.fully_connected(self.flat1, self.num_components*self.latent_dimension)
-                self.stddev=nn.fully_connected(self.flat1, self.num_components*self.latent_dimension)#, activation_fn=tf.nn.softplus)
-                self.logmix=nn.fully_connected(self.flat1, self.num_components*self.latent_dimension)
+                self.mean_out=nn.fully_connected(self.flat1, self.num_components*self.latent_dimension)
+                self.stddev_out=nn.fully_connected(self.flat1, self.num_components*self.latent_dimension)#, activation_fn=tf.nn.softplus)
+                self.logmix_out=nn.fully_connected(self.flat1, self.num_components*self.latent_dimension)
             elif (self.prediction=='KL'):
                 self.mean=nn.fully_connected(self.flat1, self.latent_dimension)
                 self.stddev=nn.fully_connected(self.flat1, self.latent_dimension, activation_fn=tf.nn.softplus)    
@@ -99,9 +99,9 @@ class RNN():
             if (self.prediction=='MSE'):
                 self.representation_loss=tf.reduce_mean(tf.reduce_sum(tf.square(true_next_state - self.next_state_out),axis=-1))
             elif (self.prediction=='GMM'): 
-                self.mean=tf.reshape(self.mean , [-1, self.num_components])
-                self.stddev=tf.reshape(self.stddev , [-1, self.num_components])
-                self.logmix=tf.reshape(self.logmix , [-1, self.num_components])
+                self.mean=tf.reshape(self.mean_out , [-1, self.num_components])
+                self.stddev=tf.reshape(self.stddev_out , [-1, self.num_components])
+                self.logmix=tf.nn.softmax(tf.reshape(self.logmix_out , [-1, self.num_components]), axis=-1)
                 logmix=self.logmix - tf.reduce_logsumexp(self.logmix, 1, keepdims=True)
                 #tf_lognormal
                 self.lognorm=-0.5 * ((true_next_state - self.mean) / tf.exp(self.stddev)) ** 2 - self.stddev - np.log(np.sqrt(2.0 * np.pi))
@@ -109,7 +109,6 @@ class RNN():
                 self.representation_loss= -tf.reduce_mean(tf.reduce_logsumexp(v, 1, keepdims=True))
             elif (self.prediction=='KL'):
                 self.single_loss=tf.reduce_sum(tf.log(self.stddev / (self.true_next_state_std + 1e-9)) +  ((self.true_next_state_std**2 + (self.mean - self.true_next_state_mu)**2)/(2*self.stddev**2)) -0.5, axis=-1)
-                print('kl loss for single example CHECK IF IT IS POSITIVE', self.single_loss)
                 self.representation_loss=tf.reduce_mean(self.single_loss)
 
         with tf.variable_scope('reward_loss'):        
