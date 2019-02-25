@@ -130,9 +130,11 @@ class Trainer():
             init_state=np.zeros((rnn.num_layers, 2, train_batch_size, rnn.hidden_units))
 
             #Train
+            
             _, summ = rnn.sess.run([rnn.opt, rnn.training], feed_dict={rnn.X: inputData, 
                                                          rnn.true_next_state: labelData,
                                                          rnn.init_state: init_state})
+
             rnn.file.add_summary(summ, ep)
             #Saving and testing
             if ep % 50 ==0:

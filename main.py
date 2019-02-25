@@ -61,6 +61,8 @@ flags.DEFINE_integer('RNN_test_size', 64, 'Number of frames to feed at each epoc
 flags.DEFINE_integer('sequence_length', 100, 'Total number of states to feed to the RNN')
 flags.DEFINE_integer('hidden_units', 128, 'Number of hidden units in the LSTM layer')
 flags.DEFINE_integer('LSTM_layers', 1, 'Number of the LSTM layers')
+flags.DEFINE_integer('num_components', 5, 'Number of components of GMM')
+flags.DEFINE_string('prediction_type', 'KL', 'The prediction can be MSE, GMM or KL')
 
 
 #ACTOR

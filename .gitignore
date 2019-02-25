@@ -1,3 +1,4 @@
 models/VAEGAN/events.*
 models/RNN/events.*
 models/ACTOR/events.*
+backupModel/*

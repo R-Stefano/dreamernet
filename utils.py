@@ -35,7 +35,10 @@ def testingVAEGAN(frames, vae):
 #Used to retrieve a sequence of frames and actions plus the next frames and the rewards
 def prepareRNNData(batch_size, timesteps, features, frames, actions, rewards, vaegan):
     inputData=np.zeros((batch_size, timesteps, features + FLAGS.actions_size))#+1 is action
-    labelData=np.zeros((batch_size, timesteps, features +1))#+1 is reward
+    if (FLAGS.prediction_type =='KL'):
+        labelData=np.zeros((batch_size, timesteps, 2*features +1))#+1 is reward
+    else:
+        labelData=np.zeros((batch_size, timesteps, features +1))#+1 is reward
 
     #random select 32 states (-1 to avoid to predict the frame after the last frame)
     s_idxs=np.random.randint(timesteps, (frames.shape[0]-1), batch_size)
@@ -43,17 +46,22 @@ def prepareRNNData(batch_size, timesteps, features, frames, actions, rewards, va
         start=end-timesteps
         all_frames=frames[start:end+1]
         
-        #frames must be encoded first
+        #frames must be encoded first (this is used when training actor)
         if (all_frames.shape[-1]==3):
             all_frames=vaegan.encode(all_frames)
 
         #retrieve the timesteps-1 previous states and actions
         seqStates=all_frames[:-1]
+        mu, std=np.split(seqStates, [features], axis=-1)
+        seqStates=mu + std*np.random.normal(size=features)
         seqActions=np.expand_dims(actions[start:end], axis=-1)
         inputData[i]=np.concatenate((seqStates, seqActions), axis=-1)
 
         #retrieve the rewards and the states shifted by 1 in the future
         seqStates=all_frames[1:]
+        if not(FLAGS.prediction_type =='KL'):
+            mu, std=np.split(seqStates, [features], axis=-1)
+            seqStates=mu + std*np.random.normal(size=features)
         seqRews=np.expand_dims(rewards[start:end], axis=-1)
         labelData[i]=np.concatenate((seqStates, seqRews), axis=-1)
 
