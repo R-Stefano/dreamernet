@@ -216,7 +216,17 @@ class Trainer():
             states=mu + std*np.random.normal(size=(states.shape[0], rnn.latent_dimension))
         h_state=hidden_states[idxs][:,0,0,0]
 
-        _, vs1=actor.predict(np.concatenate((states, h_state), axis=-1))
+        #retrieve maxQ(s',a)
+        policy, _=actor.predict(np.concatenate((states, h_state), axis=-1))
+        s1a=np.max(policy, axis=-1)
+        #compute bvalue function
+        r=rewardsBuffer[idxs]
+        d=terminalBuffer[idxs]
+
+        target=((1-d)*0.99 * s1a) + r
+
+        #retrieve actions
+        input_actions=actionsBuffer[idxs]
 
         #train the network
         idxs=idxs-1
@@ -226,16 +236,9 @@ class Trainer():
             states=mu + std*np.random.normal(size=(states.shape[0], rnn.latent_dimension))
         h_state=hidden_states[idxs][:,0,0,0]
 
-        #retrieve actions
-        input_actions=actionsBuffer[idxs]
-        input_rewards=rewardsBuffer[idxs]
-        input_terminal=terminalBuffer[idxs]
-
         dict_input= {actor.X: np.concatenate((states, h_state), axis=-1),
-                     actor.actions: input_actions,
-                     actor.Vs1: vs1,
-                     actor.rewards: input_rewards,
-                     actor.isTerminal: input_terminal}
+                     actor.targets: target,
+                     actor.actions: input_actions}
 
         _, summ=actor.sess.run([actor.opt, actor.training], feed_dict=dict_input)
         actor.file.add_summary(summ, step)

@@ -34,7 +34,10 @@ def run(env, vaegan, rnn, actor, trainer):
             inputActor=np.concatenate((enc, h), axis=-1) #[1,192]
             policy, value=actor.predict(inputActor)
 
-            a=np.argmax(policy)
+            if np.random.random()>0.2:
+                a=np.argmax(policy)
+            else:
+                a=env.env.action_space.sample()
 
             #predict next state but retrieve the encoded version #[1,128]
             inputRNN=np.expand_dims(np.concatenate((enc, np.asarray(a).reshape((1,1))), axis=-1), axis=1)
@@ -44,6 +47,7 @@ def run(env, vaegan, rnn, actor, trainer):
             actionsBuffer.append(a)
 
             s, r, d=env.repeatStep(a)
+            print(a)
             game_rew += r
             rewardsBuffer.append(r)
             terminalBuffer.append(d)

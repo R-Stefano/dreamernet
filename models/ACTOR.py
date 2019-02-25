@@ -29,34 +29,43 @@ class ACTOR():
     
     def buildGraph(self):
         x=self.X
-        self.setups={
-            'MLP': [nn.fully_connected(x, 128), nn.fully_connected(x, 256)]
-        }
+        x=nn.fully_connected(x, 128)
+        x=nn.fully_connected(x, 256)
 
-        for l in self.setups['MLP']:
-            x=l
-
-        self.policyOutput=nn.fully_connected(x, self.num_actions, activation_fn=tf.nn.softmax)
-        self.valueOutput=nn.fully_connected(x, 1, activation_fn=None)
+        if (FLAGS.use_policy):
+            self.policyOutput=nn.fully_connected(x, self.num_actions, activation_fn=tf.nn.softmax)
+            self.valueOutput=nn.fully_connected(x, 1, activation_fn=None)
+        else:
+            self.actor_output=nn.fully_connected(x, self.num_actions, activation_fn=None)
     
     def buildLoss(self):
         self.actions=tf.placeholder(tf.int32, shape=[None])
-        self.Vs1=tf.placeholder(tf.float32, shape=[None])
-        self.rewards=tf.placeholder(tf.float32, shape=[None])
-        self.isTerminal=tf.placeholder(tf.float32, shape=[None])
+        self.targets=tf.placeholder(tf.float32, shape=[None])
+        #self.rewards=tf.placeholder(tf.float32, shape=[None])
+        #self.isTerminal=tf.placeholder(tf.float32, shape=[None])
 
         #Convert actions to hot encode
         self.a_hot_encoded=tf.one_hot(self.actions, self.num_actions)
 
-        self.advantage=tf.reshape(self.valueOutput, [-1]) - (1-self.isTerminal)*(self.rewards + 0.99 * self.Vs1)
-        
-        with tf.variable_scope('value_loss'):
-            self.valueLoss=tf.square(self.advantage)
+        if (FLAGS.use_policy):
+            self.advantage=tf.reshape(self.valueOutput, [-1]) - (1-self.isTerminal)*(self.rewards + 0.99 * self.Vs1)
+            
+            with tf.variable_scope('value_loss'):
+                self.valueLoss=tf.square(self.advantage)
 
-        with tf.variable_scope('policy_loss'):
-            self.policyLoss=-tf.reduce_sum(self.a_hot_encoded * tf.log(self.policyOutput + 1e-9) + (1-self.a_hot_encoded)*tf.log(1-self.policyOutput + 1e-9),axis=-1) * self.advantage
-        
-        self.totLoss = tf.reduce_mean(self.valueLoss + self.policyLoss)
+            with tf.variable_scope('policy_loss'):
+                self.policyLoss=-tf.reduce_sum(self.a_hot_encoded * tf.log(self.policyOutput + 1e-9) + (1-self.a_hot_encoded)*tf.log(1-self.policyOutput + 1e-9),axis=-1) * self.advantage
+            
+            self.totLoss = tf.reduce_mean(self.valueLoss + self.policyLoss)
+        else:
+            self.qsa=tf.reduce_sum(self.actor_output * self.a_hot_encoded, axis=1, name="computing_prediction")
+
+            self.diff=tf.square(self.targets - self.qsa)
+
+            self.totLoss=tf.reduce_mean(self.diff)
+
+
+
 
         self.opt=tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.totLoss)
         
@@ -68,9 +77,9 @@ class ACTOR():
         
         with tf.name_scope('actor_training'):
             self.training=tf.summary.merge([
-                tf.summary.scalar('policy_loss', tf.reduce_mean(self.policyLoss)),
-                tf.summary.scalar('value_loss',  tf.reduce_mean(self.valueLoss)),
-                tf.summary.scalar('tot_loss', self.totLoss),
+                #tf.summary.scalar('policy_loss', tf.reduce_mean(self.policyLoss)),
+                #tf.summary.scalar('value_loss',  tf.reduce_mean(self.valueLoss)),
+                tf.summary.scalar('tot_loss', self.totLoss)
             ])
 
         with tf.name_scope('game'):
@@ -86,6 +95,9 @@ class ACTOR():
         if (len(state.shape) == 1):
             state=np.expand_dims(state, axis=0)
 
-        policy, value=self.sess.run([self.policyOutput, self.valueOutput], feed_dict={self.X: state})
-
+        if (FLAGS.use_policy):
+            policy, value=self.sess.run([self.policyOutput, self.valueOutput], feed_dict={self.X: state})
+        else:
+            policy=self.sess.run(self.actor_output, feed_dict={self.X: state})
+            value=None
         return np.squeeze(policy), np.squeeze(value)

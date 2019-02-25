@@ -74,6 +74,7 @@ flags.DEFINE_integer('transition_buffer_size', 10000, 'Number of transitions to 
 
 flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
 flags.DEFINE_integer('ACTOR_input_size', 576, 'THe dimension of input vector')
+flags.DEFINE_boolean('use_policy', False, 'If True use actor critic, otherwise value function')
 
 if (FLAGS.preprocessing and (FLAGS.training_VAE and (len(os.listdir('models/VAEGAN/'))!=0) and FLAGS.training_VAEGAN)):
     print('cleaning VAE folder..')
