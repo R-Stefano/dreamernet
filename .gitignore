@@ -1,4 +1,4 @@
 models/VAEGAN/*
 models/RNN/*
 models/ACTOR/*
-backupModel/*
+backupModels/*

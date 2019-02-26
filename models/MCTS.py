@@ -4,8 +4,9 @@ import numpy as np
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 class Node():
-    def __init__(self, state, parent, parent_action):
+    def __init__(self, state, lstmTuple, parent, parent_action):
         self.state=state
+        self.lstmTuple=lstmTuple
         self.priors= []
         self.childs = []
         self.totValue = 0
@@ -61,15 +62,24 @@ class Tree():
         self.actor=actor
 
     #This function must return the action to use
-    def predict(self, state):
-        priors, value=self.actor.predict(state)
-        root_node=Node(state, None, 0)
+    def predict(self, state, lstmTuple):
+        #Get the possible actions from the actual state
+        priors, value=self.actor.predict(np.concatenate((state, lstmTuple[0,0]), axis=-1))
+
+        #Create the root node
+        root_node=Node(state, lstmTuple, None, 0)
+
+        #Generate a list of childs nodes. One for each action
         childs=self.generateChilds(root_node)
+
+        #the priors are the values q(s,a) while the value is np.max(q(s,a))
+        #LETS MAKE IT AS THE BEST Q(S,A) in the case of value function actor
+
         root_node.initialize(priors, value, childs)
         #rollouts to create node's values
         for i in range(self.rollouts):
             nodeToExpand = root_node.selectChild()
-            priors, value=self.actor.predict(nodeToExpand.state)
+            priors, value=self.actor.predict(np.concatenate((nodeToExpand.state, nodeToExpand.lstmTuple[0,0]), axis=-1))
             childs=self.generateChilds(nodeToExpand)
             nodeToExpand.initialize(priors, value, childs)
             #update the value of the parents
@@ -82,32 +92,37 @@ class Tree():
         return np.argmax(actions)
 
     def generateChilds(self, parent):
-        #Retrieve the parents states to create the sequence
-        stateSequence=[]
-        dumpParent=parent
-        stateSequence.append(np.append(dumpParent.state, -1))
-        for t in range(self.rnn.sequence_length-1):
-            if (dumpParent.parent == None):
-                stateSequence.append(np.zeros((self.rnn.latent_dimension + 1)))
-            else:
-                dumpParent=dumpParent.parent
-                stateSequence.append(np.append(dumpParent.state, dumpParent.parent_action))
-        
-        #numpize the list
-        stateSequence=np.expand_dims(np.asarray(stateSequence), axis=0)
-        #flip the matrix along timesteps. The last inserted state should be the most recent one
-        stateSequence=np.flip(stateSequence, axis=1)
+        '''
+        This function retrieves the state and lstmTuple of the node
+        In order to predict all the possible next states from the node state
+        '''
+        #Retrieve the node state to feed as input
+        node_state=parent.state
+        #Retrieve the node lstmTuple to initialize the rnn
+        node_lstmTuple=parent.lstmTuple
 
-        #Creates a prediction for each action
-        batchStates=np.repeat(stateSequence, self.num_actions, axis=0) #num_actions, embed_length
+        #Creates a prediction for each action repeating the state
+        batchStates=np.repeat(node_state, self.num_actions, axis=0) #num_actions, embed_length
 
         #Assign an action to each state
-        batchStates[:,-1,-1]=np.asarray([i for i in range(self.num_actions)])
+        actions=np.asarray([i for i in range(self.num_actions)]).reshape(-1,1)
 
+        #concatenate states and actions to create the input of the rnn
+        inputData=np.expand_dims(np.concatenate((batchStates, actions), axis=-1), axis=1)
+
+        #repeate the lstm tuple for each example
+        inputInitialize=np.repeat(node_lstmTuple, self.num_actions, axis=-2)
+
+        #The input of the rnn should be [num_actions, 1, enc_state + action] and the lstmTuple
         #Feedx the current node state as well with the possible actions
         #Get the next states based on the actions and create the child nodes
-        predictedChilds=self.rnn.predict(batchStates)
+        predictedstates, newLSTMTuple=self.rnn.predict(inputData, initialize=inputInitialize)
+
         childs=[]        
-        for action_idx, s1 in enumerate(predictedChilds):
-            childs.append(Node(s1, parent, action_idx))
+        for action_idx, s1 in enumerate(predictedstates):
+            #format the shape of the rnn predictions (at the moment reward predicted is useless)
+            s1=s1[:-1].reshape(1,-1)
+            lstmtuple=np.expand_dims(newLSTMTuple[:,:,action_idx], axis=-2)
+            #create child nodes for each possible action
+            childs.append(Node(s1, lstmtuple, parent, action_idx))
         return childs

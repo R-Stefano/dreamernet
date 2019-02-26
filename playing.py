@@ -5,7 +5,7 @@ import utils
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
-def run(env, vaegan, rnn, actor, trainer):
+def run(env, vaegan, rnn, actor, trainer, mcts):
     print('Training actor..')
     statesBuffer=[]
     actionsBuffer=[]
@@ -21,6 +21,8 @@ def run(env, vaegan, rnn, actor, trainer):
         while (not(d)):
             # quick state preprocessing
             s=utils.preprocessingState(s)
+            if (FLAGS.renderGame):
+                env.env.render()
 
             #Save data for system training
             statesBuffer.append(s)
@@ -31,13 +33,17 @@ def run(env, vaegan, rnn, actor, trainer):
             if (FLAGS.prediction_type == 'KL'):
                 mu, std=np.split(enc, [rnn.latent_dimension], axis=-1)
                 enc=mu + std*np.random.normal(size=rnn.latent_dimension)
-            inputActor=np.concatenate((enc, h), axis=-1) #[1,192]
-            policy, value=actor.predict(inputActor)
-
-            if np.random.random()>0.2:
-                a=np.argmax(policy)
+            #Here start the MCTS in order to get the action
+            if (FLAGS.use_MCTS and (game>=FLAGS.actor_warmup)):
+                a=mcts.predict(enc, lstmTuple)
             else:
-                a=env.env.action_space.sample()
+                inputActor=np.concatenate((enc, h), axis=-1) #[1,192]
+                policy, value=actor.predict(inputActor)
+
+                if np.random.random()>0.05:
+                    a=np.argmax(policy)
+                else:
+                    a=env.env.action_space.sample()
 
             #predict next state but retrieve the encoded version #[1,128]
             inputRNN=np.expand_dims(np.concatenate((enc, np.asarray(a).reshape((1,1))), axis=-1), axis=1)
@@ -47,7 +53,6 @@ def run(env, vaegan, rnn, actor, trainer):
             actionsBuffer.append(a)
 
             s, r, d=env.repeatStep(a)
-            print(a)
             game_rew += r
             rewardsBuffer.append(r)
             terminalBuffer.append(d)

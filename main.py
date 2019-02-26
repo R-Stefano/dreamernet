@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import shutil #clean folder for retraining
 from utils import preprocessingState
-from models import RNN, VAEGAN, ACTOR
+from models import RNN, VAEGAN, ACTOR, MCTS
 from trainer import Trainer
 from EnvWrapper import EnvWrap
 import os
 import preprocessing
-import training
+import playing
 test_envs={
     'frost':['FrostbiteNoFrameskip-v0', 18],
     'pong':['PongNoFrameskip-v0', 6]
@@ -66,15 +66,18 @@ flags.DEFINE_string('prediction_type', 'KL', 'The prediction can be MSE, GMM or 
 
 
 #ACTOR
-flags.DEFINE_integer('actor_training_games', 1000, 'Number of games to play while training the actor')
+flags.DEFINE_integer('actor_training_games', 10000, 'Number of games to play while training the actor')
 flags.DEFINE_integer('transition_buffer_size', 10000, 'Number of transitions to store')
-#flags.DEFINE_integer('actor_training_steps', 200, 'Number of training steps after the training games')
-#flags.DEFINE_integer('actor_training_epochs', 100, 'Number of times repeate games + steps')
-#flags.DEFINE_integer('actor_testing_games', 10, 'Number of games to play after each training')
 
 flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
 flags.DEFINE_integer('ACTOR_input_size', 576, 'THe dimension of input vector')
 flags.DEFINE_boolean('use_policy', False, 'If True use actor critic, otherwise value function')
+flags.DEFINE_integer('actor_warmup', 5, 'If use MCTS is True, for the first N games, the actor not uses MCTS in order to get a good estimate first')
+
+
+#MCTS
+flags.DEFINE_integer('rollouts', 100, 'Number of rollouts at each timestep')
+flags.DEFINE_boolean('use_MCTS', True, 'If true use the MCTS to decide which action execute')
 
 if (FLAGS.preprocessing and (FLAGS.training_VAE and (len(os.listdir('models/VAEGAN/'))!=0) and FLAGS.training_VAEGAN)):
     print('cleaning VAE folder..')
@@ -82,7 +85,19 @@ if (FLAGS.preprocessing and (FLAGS.training_VAE and (len(os.listdir('models/VAEG
 if (FLAGS.preprocessing and (FLAGS.training_RNN and (len(os.listdir('models/RNN/'))!=0))):
     print('cleaning RNN folder..')
     shutil.rmtree('models/RNN/')#clean folder
+'''
+TODO:
+keep selected node in MCTS for the next timestep
+add terminal to the rnn prediction and so to the MCTS
+maybe move from 4 frames to 8 frames skip (in order to have reaction time similar to human (0.15s))
+(this implies retrain the RNN)
+Implement prioritized experience replay
 
+MAYBE TODO:
+GMM for rnn
+attention mechanism to the actor
+add debugging to see if everything works and how the agent is behaving
+'''
 vae_sess=tf.Session()
 rnn_sess=tf.Session()
 actor_sess=tf.Session()
@@ -91,6 +106,7 @@ env=EnvWrap(FLAGS.init_frame_skip, FLAGS.frame_skip, FLAGS.env, FLAGS.renderGame
 vaegan=VAEGAN.VAEGAN(vae_sess)
 rnn=RNN.RNN(rnn_sess)
 actor=ACTOR.ACTOR(actor_sess)
+mcts=MCTS.Tree(rnn, actor)
 trainer=Trainer()
 
 #If called, train the VAEGAN AND RNN before the actor
@@ -99,7 +115,7 @@ if (FLAGS.preprocessing):
 
 if (FLAGS.playing):
     #Make the actor play and train VAEGAN, RNN and actor
-    training.run(env, vaegan, rnn, actor, trainer)
+    playing.run(env, vaegan, rnn, actor, trainer, mcts)
 
 '''
 def main():

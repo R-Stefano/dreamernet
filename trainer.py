@@ -207,7 +207,8 @@ class Trainer():
         rnn.save()
 
         #3. TRAIN ACTOR with s,h and real reward
-        idxs=np.random.randint(0, statesBuffer.shape[0]-1, 32)
+        #retrieve transictions to use for training
+        idxs=np.random.randint(1, statesBuffer.shape[0]-1, 32)
 
         #First, feed states for vs1
         states=vaegan.encode(statesBuffer[idxs])
@@ -218,24 +219,27 @@ class Trainer():
 
         #retrieve maxQ(s',a)
         policy, _=actor.predict(np.concatenate((states, h_state), axis=-1))
-        s1a=np.max(policy, axis=-1)
-        #compute bvalue function
+        s1avalue=np.max(policy, axis=-1)
+
+        #retrieve the previous transition
+        idxs=idxs-1
+
+        #compute value function
         r=rewardsBuffer[idxs]
         d=terminalBuffer[idxs]
 
-        target=((1-d)*0.99 * s1a) + r
+        target=((1-d)*0.99 * s1avalue) + r
 
-        #retrieve actions
+        #retrieve actions executed at state s
         input_actions=actionsBuffer[idxs]
 
-        #train the network
-        idxs=idxs-1
         states=vaegan.encode(statesBuffer[idxs])
         if (FLAGS.prediction_type == 'KL'):
             mu, std=np.split(states, [rnn.latent_dimension], axis=-1)
             states=mu + std*np.random.normal(size=(states.shape[0], rnn.latent_dimension))
         h_state=hidden_states[idxs][:,0,0,0]
 
+        #train the network
         dict_input= {actor.X: np.concatenate((states, h_state), axis=-1),
                      actor.targets: target,
                      actor.actions: input_actions}
@@ -243,81 +247,3 @@ class Trainer():
         _, summ=actor.sess.run([actor.opt, actor.training], feed_dict=dict_input)
         actor.file.add_summary(summ, step)
         actor.save()
-
-
-'''
-    #Called to train alphazero using everything.
-    def trainActor(self,mcts, vae, rnn, env, actor):
-        training_games=FLAGS.actor_training_games
-        epochs=FLAGS.actor_training_epochs
-        training_steps=FLAGS.actor_training_steps
-        testing_games=FLAGS.actor_testing_games
-
-        step=0
-        for ep in range(epochs):
-            print('Training Actor, epoch ({}/{})'.format(ep,epochs))
-
-            print('Generating games..')
-            states, actions, rewards, isTerminal=self.play(training_games, env, vae, mcts)
-
-            print('training on sampled transitions..')
-            for tr in range(training_steps):
-                batchNextStates=[]
-                batchStates=[]
-                batchActions=[]
-                batchRewards=[]
-                batchTerminal=[]
-                #Generate a batch of 32 examples to feed to train the network
-                for i in range(32):
-                    idx=np.random.randint(0, len(states)-1)
-                    batchNextStates.append(states[idx+1])
-                    batchStates.append(states[idx])
-                    batchActions.append(actions[idx])
-                    batchRewards.append(rewards[idx])
-                    batchTerminal.append(isTerminal[idx])
-                
-                batchTerminal=np.asarray(batchTerminal).astype(int)
-                #First feed the next state to the network to obtain the prediction about the value of V(s')
-                _, s1Values=actor.predict(np.asarray(batchNextStates)) #return batch_size,1
-                _, summ,=actor.sess.run([actor.opt, actor.training], feed_dict={actor.X: np.asarray(batchStates),
-                                                                                actor.rewards: np.asarray(np.expand_dims(batchRewards, axis=-1)),
-                                                                                actor.actions: np.asarray(batchActions),
-                                                                                actor.Vs1: s1Values,
-                                                                                actor.isTerminal: batchTerminal})
-                actor.file.add_summary(summ, step)
-                step+=1
-            print('Saving the actor..')
-            actor.save() 
-
-            print('Testing the actor..')
-            avg_rew=[]
-            for i in range(testing_games):
-                _, _, rewards, _=self.play(1, env, vae, mcts)
-                avg_rew.append(np.sum(rewards))
-            
-            print('avg test rew', np.mean(avg_rew))
-            summ=actor.sess.run(actor.testing, feed_dict={actor.avgRew: np.mean(avg_rew)})
-            actor.file.add_summary(summ, ep)
-
-    def play(self, number_games, env, vae, mcts):
-        states=[]
-        actions=[]
-        rewards=[]
-        isTerminal=[]
-        for i in range(number_games):
-            s,d=env.initializeGame()
-            while not(d):
-                s=preprocessingState(s)
-                #Returns the embedding of the current state
-                s=np.squeeze(vae.encode(s))
-                a=mcts.predict(s)
-
-                s1, r, d=env.repeatStep(a+1)
-
-                states.append(s)
-                actions.append(a)
-                rewards.append(r)
-                isTerminal.append(d)
-                s=s1
-        return states, actions, rewards, isTerminal
-'''

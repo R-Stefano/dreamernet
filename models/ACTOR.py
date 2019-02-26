@@ -99,5 +99,6 @@ class ACTOR():
             policy, value=self.sess.run([self.policyOutput, self.valueOutput], feed_dict={self.X: state})
         else:
             policy=self.sess.run(self.actor_output, feed_dict={self.X: state})
-            value=None
+            value=np.max(policy, axis=-1)
+        #it returns the value of each action in the case of Q value
         return np.squeeze(policy), np.squeeze(value)
