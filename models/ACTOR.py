@@ -60,9 +60,9 @@ class ACTOR():
         else:
             self.qsa=tf.reduce_sum(self.actor_output * self.a_hot_encoded, axis=1, name="computing_prediction")
 
-            self.diff=tf.square(self.targets - self.qsa)
+            self.tdError=tf.square(self.targets - self.qsa)
 
-            self.totLoss=tf.reduce_mean(self.diff)
+            self.totLoss=tf.reduce_mean(self.tdError)
 
 
 

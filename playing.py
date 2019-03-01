@@ -12,6 +12,7 @@ def run(env, vaegan, rnn, actor, trainer, mcts):
     rewardsBuffer=[]
     h_statesBuffer=[]
     terminalBuffer=[]
+    tdErrorBuffer=[]
     for game in range(FLAGS.actor_training_games):
         print('Actor playing game ({}/{})'.format(game, FLAGS.actor_training_games))
         s, d=env.initializeGame()
@@ -56,6 +57,7 @@ def run(env, vaegan, rnn, actor, trainer, mcts):
             game_rew += r
             rewardsBuffer.append(r)
             terminalBuffer.append(d)
+            tdErrorBuffer.append(0)
 
             #keep max size of FLAGS.transition_buffer_size transitions
             if (len(statesBuffer) > FLAGS.transition_buffer_size):
@@ -64,6 +66,7 @@ def run(env, vaegan, rnn, actor, trainer, mcts):
                 del rewardsBuffer[0]
                 del h_statesBuffer[0]
                 del terminalBuffer[0]
+                del tdErrorBuffer[0]
 
             if d:
                 statesBuffer.append(np.zeros((statesBuffer[-1].shape)))
@@ -71,15 +74,17 @@ def run(env, vaegan, rnn, actor, trainer, mcts):
                 rewardsBuffer.append(r)
                 h_statesBuffer.append(lstmTuple)
                 terminalBuffer.append(d)
+                tdErrorBuffer.append(0)
 
 
         if len(statesBuffer)>FLAGS.sequence_length:
             print('Training system..')
-            trainer.trainSystem(np.asarray(statesBuffer),
+            tdbufferUpdated=trainer.trainSystem(np.asarray(statesBuffer),
                                 np.asarray(actionsBuffer),
                                 np.asarray(rewardsBuffer),
                                 np.asarray(terminalBuffer), 
                                 np.asarray(h_statesBuffer),
+                                np.asarray(tdErrorBuffer),
                                 vaegan, 
                                 rnn,
                                 actor,
@@ -87,6 +92,9 @@ def run(env, vaegan, rnn, actor, trainer, mcts):
             
             summ=actor.sess.run(actor.game, feed_dict={actor.avgRew: game_rew})
             actor.file.add_summary(summ, game)
+
+            #update the tdbuffer with the new errors
+            tdErrorBuffer=tdbufferUpdated
 
 
         

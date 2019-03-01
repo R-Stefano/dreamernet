@@ -73,6 +73,7 @@ flags.DEFINE_boolean('training_ACTOR', True, 'If True, train the ACTOR model')
 flags.DEFINE_integer('ACTOR_input_size', 576, 'THe dimension of input vector')
 flags.DEFINE_boolean('use_policy', False, 'If True use actor critic, otherwise value function')
 flags.DEFINE_integer('actor_warmup', 5, 'If use MCTS is True, for the first N games, the actor not uses MCTS in order to get a good estimate first')
+flags.DEFINE_boolean('use_prioritized_exp_rep', True, 'If True give more importance to the positive experiences')
 
 
 #MCTS
@@ -91,10 +92,10 @@ keep selected node in MCTS for the next timestep
 add terminal to the rnn prediction and so to the MCTS
 maybe move from 4 frames to 8 frames skip (in order to have reaction time similar to human (0.15s))
 (this implies retrain the RNN)
-Implement prioritized experience replay
+Implement prioritized experience replay DONE
+DECREASING LEARNING RATE FOR ACTOR
 
 MAYBE TODO:
-GMM for rnn
 attention mechanism to the actor
 add debugging to see if everything works and how the agent is behaving
 '''

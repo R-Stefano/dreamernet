@@ -176,6 +176,7 @@ class Trainer():
                     rewardsBuffer, 
                     terminalBuffer, 
                     hidden_states, 
+                    tdErrorBuffer,
                     vaegan, 
                     rnn,
                     actor,
@@ -207,8 +208,12 @@ class Trainer():
         rnn.save()
 
         #3. TRAIN ACTOR with s,h and real reward
-        #retrieve transictions to use for training
-        idxs=np.random.randint(1, statesBuffer.shape[0]-1, 32)
+        if (FLAGS.use_prioritized_exp_rep):
+            #Get higher td errors. Use argsort 10k elements is still fast to sort
+            idxs=np.argsort(tdErrorBuffer)[-32:]
+        else:
+            #retrieve transictions to use for training
+            idxs=np.random.randint(1, statesBuffer.shape[0]-1, 32)
 
         #First, feed states for vs1
         states=vaegan.encode(statesBuffer[idxs])
@@ -244,6 +249,11 @@ class Trainer():
                      actor.targets: target,
                      actor.actions: input_actions}
 
-        _, summ=actor.sess.run([actor.opt, actor.training], feed_dict=dict_input)
+        _, summ, tdErrors=actor.sess.run([actor.opt, actor.training, actor.tdError], feed_dict=dict_input)
         actor.file.add_summary(summ, step)
         actor.save()
+
+        #Update the td errors in the experience replay
+        tdErrorBuffer[idxs+1]=tdErrors
+
+        return tdErrorBuffer.tolist()
