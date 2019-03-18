@@ -88,16 +88,20 @@ if (FLAGS.preprocessing and (FLAGS.training_RNN and (len(os.listdir('models/RNN/
     shutil.rmtree('models/RNN/')#clean folder
 '''
 TODO:
-keep selected node in MCTS for the next timestep
-add terminal to the rnn prediction and so to the MCTS
-maybe move from 4 frames to 8 frames skip (in order to have reaction time similar to human (0.15s))
+1. keep selected node in MCTS for the next timestep
+2. add terminal to the rnn prediction and so to the MCTS
+3. maybe move from 4 frames to 8 frames skip (in order to have reaction time similar to human (0.15s)) dosen't work properly
 (this implies retrain the RNN)
-Implement prioritized experience replay DONE
-DECREASING LEARNING RATE FOR ACTOR
+4. Implement prioritized experience replay DONE.
+maybe some also some 0 errors to keep all the transitions used
+5. DECREASING LEARNING RATE FOR ACTOR
 
 MAYBE TODO:
-attention mechanism to the actor
-add debugging to see if everything works and how the agent is behaving
+1. attention mechanism to the actor
+2. attention mechanism in the predictor. 
+option 1: convert the vector into a feature map 
+option 2: use directly feature map maybe use feature maps like 5x5x256 and then apply a transformer to it
+3. add debugging to see if everything works and how the agent is behaving
 '''
 vae_sess=tf.Session()
 rnn_sess=tf.Session()

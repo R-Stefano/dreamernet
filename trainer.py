@@ -209,8 +209,10 @@ class Trainer():
 
         #3. TRAIN ACTOR with s,h and real reward
         if (FLAGS.use_prioritized_exp_rep):
-            #Get higher td errors. Use argsort 10k elements is still fast to sort
-            idxs=np.argsort(tdErrorBuffer)[-32:]
+            #Get higher td errors and lower td errors. Use argsort 10k elements is still fast to sort
+            higher_erros_idxs=np.asarray(np.argsort(tdErrorBuffer)[-26:])
+            low_erros_idxs=np.asarray(np.argsort(tdErrorBuffer)[:6])
+            idxs=np.concatenate((low_erros_idxs, higher_erros_idxs), axis=-1)
         else:
             #retrieve transictions to use for training
             idxs=np.random.randint(1, statesBuffer.shape[0]-1, 32)
